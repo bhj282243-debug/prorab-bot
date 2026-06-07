@@ -867,4 +867,6 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
                     for r in rows: 
                         dt = format_db_date(r[6]) 
                         price_val = float(r[3]) if r[3] else float(r[4]) 
-                        history += f"• {dt} — {r[0]}: {r[1] or '1'} {r[2] or 'шт'} × {price_val:,.0f} = {float(r[4]):
+                        history += f"• {dt} - {r[0]}:\n{r[1] or '1'} {r[2] or 'шт'} × {price_val:,.0f} = {float(r[4]):,.0f}\n"
+bot.send_message(chat_id, history, parse_mode='Markdown')
+
