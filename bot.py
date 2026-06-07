@@ -410,7 +410,8 @@ def handle_project_menu_display(chat_id: int, state: dict):
     status_emoji = "🟩" if balance >= 0 else "🟥"
 
     text = (
-        f"📂 Объект: *{project.upper()}*\n"
+     f"📂 Объект: *{(project or 'Без названия').upper()}*\n"
+
         f"———————————————————\n"
         f"💰 Получено:  {client_total:,.0f} сум\n"
         f"📉 Потрачено: {total_spent:,.0f} сум\n"
