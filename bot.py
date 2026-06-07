@@ -12,6 +12,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # ─── ЛОГГИРОВАНИЕ ───────────────────────────────────────────────────────────
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
@@ -19,8 +20,9 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ─── КОНФИГ ─────────────────────────────────────────────────────────────────
-BOT_TOKEN    = os.environ.get("BOT_TOKEN")
-AI_API_KEY   = os.environ.get("AI_API_KEY")
+
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+AI_API_KEY = os.environ.get("AI_API_KEY")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 _missing = [name for name, val in [("BOT_TOKEN", BOT_TOKEN), ("AI_API_KEY", AI_API_KEY), ("DATABASE_URL", DATABASE_URL)] if not val]
@@ -30,7 +32,8 @@ if _missing:
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True)
 
-# ─── ПУЛ СОЕДИНЕНИЙ БД (исправление #1) ─────────────────────────────────────
+# ─── ПУЛ СОЕДИНЕНИЙ БД ─────────────────────────────────────────────────────
+
 db_pool = psycopg2.pool.ThreadedConnectionPool(2, 20, DATABASE_URL)
 
 def get_conn():
@@ -39,7 +42,21 @@ def get_conn():
 def put_conn(conn):
     db_pool.putconn(conn)
 
+# ─── ВСПУМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ ДАТ ──────────────────────────────
+
+def format_db_date(date_val) -> str:
+    """Безопасно форматирует дату из БД независимо от того, TIMESTAMP это или TEXT"""
+    if isinstance(date_val, datetime):
+        return date_val.strftime("%d.%m")
+    elif isinstance(date_val, str):
+        try:
+            return datetime.strptime(date_val.split()[0], "%Y-%m-%d").strftime("%d.%m")
+        except Exception:
+            return date_val[:5]
+    return "--.--"
+
 # ─── HEALTH-CHECK СЕРВЕР ─────────────────────────────────────────────────────
+
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -55,7 +72,8 @@ def run_health_check_server():
     log.info(f"Health check server on port {port}")
     server.serve_forever()
 
-# ─── ИНИЦИАЛИЗАЦИЯ БД ────────────────────────────────────────────────────────
+# ─── ИНИЦИАЛИЗАЦИЯ БД И МИГРАЦИИ ───────────────────────────────────────────
+
 def init_db():
     conn = get_conn()
     try:
@@ -76,33 +94,50 @@ def init_db():
                 category TEXT,
                 item_name TEXT,
                 quantity TEXT,
-                unit_price REAL,
-                amount REAL,
+                unit TEXT,
+                unit_price NUMERIC(15, 2),
+                amount NUMERIC(15, 2),
                 target_name TEXT,
-                created_at TEXT
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        # Сохраняем состояния пользователей в БД (исправление #2)
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS user_states (
-                user_id BIGINT PRIMARY KEY,
-                project TEXT,
-                category TEXT,
-                action TEXT,
-                is_archived BOOLEAN DEFAULT FALSE,
-                last_msg_id BIGINT
-            )
-        ''')
-        conn.commit()
-        log.info("БД инициализирована успешно.")
-    except Exception as e:
-        conn.rollback()
-        log.error(f"Ошибка инициализации БД: {e}")
-        raise
-    finally:
-        put_conn(conn)
 
-# ─── СОСТОЯНИЯ ПОЛЬЗОВАТЕЛЕЙ (персистентные) ────────────────────────────────
+        # Автоматическая безопасная миграция структуры старых баз данных 
+        try: 
+            cur.execute("ALTER TABLE transactions ADD COLUMN IF NOT EXISTS unit TEXT;") 
+            cur.execute("ALTER TABLE transactions ALTER COLUMN unit_price TYPE NUMERIC(15, 2);") 
+            cur.execute("ALTER TABLE transactions ALTER COLUMN amount TYPE NUMERIC(15, 2);") 
+            cur.execute("ALTER TABLE transactions ALTER COLUMN created_at TYPE TIMESTAMP USING created_at::timestamp;") 
+            cur.execute("ALTER TABLE projects ADD CONSTRAINT unique_user_project UNIQUE (user_id, name);") 
+        except Exception as msg_err: 
+            log.info(f"[Миграция] Структура базы данных уже в актуальном состоянии: {msg_err}") 
+            conn.rollback() 
+            cur = conn.cursor() 
+
+        cur.execute(''' 
+            CREATE TABLE IF NOT EXISTS user_states ( 
+                user_id BIGINT PRIMARY KEY, 
+                project TEXT, 
+                category TEXT, 
+                action TEXT, 
+                is_archived BOOLEAN DEFAULT FALSE, 
+                last_msg_id BIGINT 
+            ) 
+        ''') 
+        # Индексы для максимального ускорения запросов 
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_project ON transactions(user_id, project_name);") 
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);") 
+        conn.commit() 
+        log.info("БД инициализирована успешно.") 
+    except Exception as e: 
+        conn.rollback() 
+        log.error(f"Ошибка инициализации БД: {e}") 
+        raise 
+    finally: 
+        put_conn(conn) 
+
+# ─── СОСТОЯНИЯ ПОЛЬЗОВАТЕЛЕЙ (персистентные) ─────────────────────────────────
+
 def get_state(chat_id: int) -> dict:
     conn = get_conn()
     try:
@@ -111,18 +146,16 @@ def get_state(chat_id: int) -> dict:
         row = cur.fetchone()
         if row:
             return {
-                'project':     row[0],
-                'category':    row[1],
-                'action':      row[2],
+                'project': row[0],
+                'category': row[1],
+                'action': row[2],
                 'is_archived': row[3] or False,
                 'last_msg_id': row[4]
             }
         else:
-            # Создаём запись для нового пользователя
             cur.execute(
                 "INSERT INTO user_states (user_id, project, category, action, is_archived, last_msg_id) "
-                "VALUES (%s, NULL, NULL, NULL, FALSE, NULL)",
-                (chat_id,)
+                "VALUES (%s, NULL, NULL, NULL, FALSE, NULL)", (chat_id,)
             )
             conn.commit()
             return {'project': None, 'category': None, 'action': None, 'is_archived': False, 'last_msg_id': None}
@@ -140,9 +173,9 @@ def save_state(chat_id: int, state: dict):
             INSERT INTO user_states (user_id, project, category, action, is_archived, last_msg_id)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (user_id) DO UPDATE SET
-                project     = EXCLUDED.project,
-                category    = EXCLUDED.category,
-                action      = EXCLUDED.action,
+                project = EXCLUDED.project,
+                category = EXCLUDED.category,
+                action = EXCLUDED.action,
                 is_archived = EXCLUDED.is_archived,
                 last_msg_id = EXCLUDED.last_msg_id
         ''', (
@@ -160,7 +193,8 @@ def save_state(chat_id: int, state: dict):
     finally:
         put_conn(conn)
 
-# ─── ОТПРАВКА ЕДИНСТВЕННОГО СООБЩЕНИЯ (удаляет предыдущее) ──────────────────
+# ─── ОТПРАВКА ЕДИНСТВЕННОГО СООБЩЕНИЯ ───────────────────────────────────────
+
 def send_single(chat_id: int, text: str, reply_markup=None, parse_mode=None) -> telebot.types.Message:
     state = get_state(chat_id)
     if state.get('last_msg_id'):
@@ -168,49 +202,69 @@ def send_single(chat_id: int, text: str, reply_markup=None, parse_mode=None) -> 
             bot.delete_message(chat_id, state['last_msg_id'])
         except Exception:
             pass
-
     kwargs = {}
-    if reply_markup: kwargs['reply_markup'] = reply_markup
-    if parse_mode:   kwargs['parse_mode']   = parse_mode
+    if reply_markup:
+        kwargs['reply_markup'] = reply_markup
+    if parse_mode:
+        kwargs['parse_mode'] = parse_mode
     msg = bot.send_message(chat_id, text, **kwargs)
-
     state['last_msg_id'] = msg.message_id
     save_state(chat_id, state)
     return msg
 
 # ─── ИИ: ПАРСИНГ ТЕКСТА ──────────────────────────────────────────────────────
+
 def parse_smart_text(text: str, category: str):
     prompt = f"""
-Ты — продвинутый аналитик строительных расходов в Узбекистане. Распарси текст для категории '{category}'.
+Ты — продвинутый аналитик строительных расходов в Узбекистане.
+Распарси текст для категории '{category}'.
 Пользователь может прислать одну запись или СПИСОК (каждая с новой строки).
 
-ПРАВИЛО ДЛЯ ЧИСЕЛ:
-Если видишь "5000.000", "1500.000" — это миллионы (5 000 000, 1 500 000 сум). Преобразуй в полное число.
+ПРАВИЛО ДЛЯ ЧИСЕЛ: Если видишь "5000.000", "1500.000" — это миллионы (5 000 000, 1 500 000 сум). Преобразуй в полное число.
+
+ПРАВИЛО ДЛЯ ЕДИНИЦ ИЗМЕРЕНИЯ (только для категории material):
+Обязательно разделяй количество и единицу измерения.
+Например: "10 мешков цемента" -> item_name: "цемент", quantity: "10", unit: "мешок"
+"арматура 50кг" -> item_name: "арматура", quantity: "50", unit: "кг"
+"20 м2 кафеля" -> item_name: "кафель", quantity: "20", unit: "м2"
+Если единица измерения не указана явно, пиши unit: "шт".
 
 Верни строго чистый JSON-список объектов.
-
 Форматы:
-- material:  [{{"item_name":"...", "quantity":"... шт/м2/...", "unit_price": число, "amount": число}}]
-- worker:    [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
-- road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
+
+material: [{{"item_name":"...", "quantity":"...", "unit":"...", "unit_price": число, "amount": число}}]
+
+worker: [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
+
+road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
 
 Текст: {text}
 """
     return _call_gemini_text(prompt)
 
 # ─── ИИ: ПАРСИНГ ГОЛОСА ──────────────────────────────────────────────────────
+
 def parse_smart_voice(voice_bytes: bytes, category: str):
     prompt = f"""
-Ты — продвинутый аналитик строительных расходов в Узбекистане. Прослушай аудио и распарси данные для категории '{category}'.
+Ты — продвинутый аналитик строительных расходов в Узбекистане.
+Прослушай аудио и распарси данные для категории '{category}'.
 
 ПРАВИЛО ДЛЯ ЧИСЕЛ: «пять миллионов» → 5000000, «полтора миллиона» → 1500000.
 
-Верни строго чистый JSON-список объектов.
+ПРАВИЛО ДЛЯ ЕДИНИЦ ИЗМЕРЕНИЯ (только для категории material):
+Разделяй количество и единицу измерения.
+Например: "десять метров профиля" -> item_name: "профиль", quantity: "10", unit: "м"
+"цемент пять мешков" -> item_name: "цемент", quantity: "5", unit: "мешок"
+Если единица измерения не указана, используй "шт".
 
+Верни строго чистый JSON-список объектов.
 Форматы:
-- material:  [{{"item_name":"...", "quantity":"...", "unit_price": число, "amount": число}}]
-- worker:    [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
-- road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
+
+material: [{{"item_name":"...", "quantity":"...", "unit":"...", "unit_price": число, "amount": число}}]
+
+worker: [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
+
+road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
 """
     audio_b64 = base64.b64encode(voice_bytes).decode('utf-8')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={AI_API_KEY}"
@@ -237,20 +291,29 @@ def _call_gemini_raw(url: str, payload: dict):
     try:
         resp = requests.post(url, headers={"Content-Type": "application/json"}, json=payload, timeout=30)
         resp.raise_for_status()
-        raw = resp.json()['candidates'][0]['content']['parts'][0]['text'].strip()
-        # Убираем markdown-обёртку если вдруг появилась
-        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        result = json.loads(raw)
-        return result if isinstance(result, list) else [result]
-    except requests.RequestException as e:
-        log.error(f"Gemini HTTP error: {e}")
-    except (KeyError, json.JSONDecodeError) as e:
-        log.error(f"Gemini parse error: {e}")
-    return None
+        resp_json = resp.json()
 
-# ─── БД: СОХРАНЕНИЕ ЗАПИСЕЙ (исправление #4 — была отсутствующей) ───────────
+        # Полная защита от непредвиденной структуры ответа ИИ 
+        if 'candidates' not in resp_json or not resp_json['candidates']: 
+            log.error(f"Gemini вернул пустой список кандидатов: {resp_json}") 
+            return None 
+        candidate = resp_json['candidates'][0] 
+        if 'content' not in candidate or 'parts' not in candidate['content'] or not candidate['content']['parts']: 
+            log.error(f"Некорректный формат контента у Gemini: {resp_json}") 
+            return None 
+        raw = candidate['content']['parts'][0].get('text', '').strip() 
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip() 
+        result = json.loads(raw) 
+        return result if isinstance(result, list) else [result] 
+    except requests.RequestException as e: 
+        log.error(f"Gemini HTTP error: {e}") 
+    except (KeyError, json.JSONDecodeError) as e: 
+        log.error(f"Gemini parse error: {e}") 
+    return None 
+
+# ─── БД: СОХРАНЕНИЕ ЗАПИСЕЙ ─────────────────────────────────────────────────
+
 def save_entries_to_db(chat_id: int, project: str, category: str, entries: list):
-    today = datetime.now().strftime("%Y-%m-%d")
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -264,8 +327,7 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
             if amount <= 0:
                 continue
             cur.execute('''
-                INSERT INTO transactions
-                    (user_id, project_name, category, item_name, quantity, unit_price, amount, target_name, created_at)
+                INSERT INTO transactions (user_id, project_name, category, item_name, quantity, unit, unit_price, amount, target_name)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
                 chat_id,
@@ -273,10 +335,10 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
                 category,
                 e.get('item_name', '—'),
                 e.get('quantity'),
+                e.get('unit', 'шт') if category == 'material' else None,
                 (lambda v: float(v) if v not in (None, '', 'null') else None)(e.get('unit_price')),
                 amount,
-                e.get('target_name'),
-                today
+                e.get('target_name')
             ))
             saved += 1
         conn.commit()
@@ -288,60 +350,76 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
     finally:
         put_conn(conn)
 
-# ─── БД: ИСТОРИЯ КАТЕГОРИИ ───────────────────────────────────────────────────
-def get_category_history_text(chat_id: int, project: str, category: str) -> str:
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        if category == 'worker':
-            cur.execute(
-                "SELECT created_at, target_name, amount, item_name FROM transactions "
-                "WHERE project_name = %s AND category = %s ORDER BY id ASC",
-                (project, category)
-            )
-            rows = cur.fetchall()
-            if not rows:
-                return "📖 *В этой категории пока пусто.*\n"
-            res = "📖 *Взаиморасчёты:*\n"
-            for r in rows:
-                dt = datetime.strptime(r[0], "%Y-%m-%d").strftime("%d.%m")
-                res += f"• {dt} — {r[1]} — {r[2]:,.0f} сум ({r[3]})\n"
-        elif category == 'material':
-            cur.execute(
-                "SELECT created_at, item_name, quantity, unit_price, amount FROM transactions "
-                "WHERE project_name = %s AND category = %s ORDER BY id ASC",
-                (project, category)
-            )
-            rows = cur.fetchall()
-            if not rows:
-                return "📖 *В этой категории пока пусто.*\n"
-            res = "📖 *Материалы:*\n"
-            for r in rows:
-                dt = datetime.strptime(r[0], "%Y-%m-%d").strftime("%d.%m")
-                qty   = r[2] if r[2] else "1 шт"
-                price = r[3] if r[3] else r[4]
-                res += f"• {dt} — {r[1]}: {qty} × {price:,.0f} = {r[4]:,.0f} сум\n"
-        else:
-            cur.execute(
-                "SELECT created_at, item_name, amount FROM transactions "
-                "WHERE project_name = %s AND category = %s ORDER BY id ASC",
-                (project, category)
-            )
-            rows = cur.fetchall()
-            if not rows:
-                return "📖 *В этой категории пока пусто.*\n"
-            res = "📖 *Записи:*\n"
-            for r in rows:
-                dt = datetime.strptime(r[0], "%Y-%m-%d").strftime("%d.%m")
-                res += f"• {dt} — {r[1]} — {r[2]:,.0f} сум\n"
-        return res + "———————————————————\n"
-    except Exception as e:
-        log.error(f"get_category_history_text error: {e}")
-        return "⚠️ Ошибка загрузки истории.\n"
-    finally:
-        put_conn(conn)
+# ─── ДИНАМИЧЕСКИЙ ЭКРАН КАТЕГОРИИ С ИНЛАЙН-КНОПКАМИ ───────────────────────────
 
-# ─── КЛАВИАТУРЫ ──────────────────────────────────────────────────────────────
+def show_category_page(chat_id: int, project: str, category: str, prefix_text: str = ""):
+    conn = get_conn()
+    inline_markup = types.InlineKeyboardMarkup(row_width=2)
+
+    prompts = { 
+        "material": "✍️ Жду закупку материалов (текст или голос):", 
+        "worker": "✍️ Жду аванс рабочего (текст или голос):", 
+        "road": "✍️ Жду дорожный расход (текст или голос):", 
+        "unexpected": "✍️ Жду непредвиденный расход (текст или голос):", 
+        "client": "✍️ Жду сумму от клиента (текст или голос):" 
+    } 
+    try: 
+        cur = conn.cursor() 
+        # [ЗАЩИТА] Добавлен фильтр user_id 
+        cur.execute( 
+            "SELECT id, created_at, item_name, quantity, unit, unit_price, amount, target_name " 
+            "FROM transactions WHERE user_id = %s AND project_name = %s AND category = %s ORDER BY id ASC", 
+            (chat_id, project, category) 
+        ) 
+        rows = cur.fetchall() 
+        if category == 'worker': 
+            res = "📖 *Взаиморасчеты:*\n" 
+            for r in rows: 
+                dt = format_db_date(r[1]) 
+                res += f"• {dt} — {r[7]} — {float(r[6]):,.0f} сум ({r[2]})\n" 
+        elif category == 'material': 
+            res = "📖 *Материалы:*\n" 
+            for r in rows: 
+                dt = format_db_date(r[1]) 
+                qty = r[3] if r[3] else "1" 
+                unit = r[4] if r[4] else "шт" 
+                price = float(r[5]) if r[5] else float(r[6]) 
+                res += f"• {dt} — {r[2]}: {qty} {unit} × {price:,.0f} = {float(r[6]):,.0f} сум\n" 
+        else: 
+            res = "📖 *Записи:*\n" 
+            for r in rows: 
+                dt = format_db_date(r[1]) 
+                res += f"• {dt} — {r[2]} — {float(r[6]):,.0f} сум\n" 
+        if not rows: 
+            res = "📖 *В этой категории пока пусто.*\n" 
+        
+        # Кнопки для управления последними 6 записями 
+        recent_rows = rows[-6:] 
+        if recent_rows: 
+            for r in recent_rows: 
+                t_id, _, item_name, _, _, _, amount, target_name = r 
+                name = target_name if category == 'worker' else item_name 
+                if not name or name == '—': 
+                    name = "Запись" 
+                if len(name) > 12: 
+                    name = name[:10] + ".." 
+                btn_edit = types.InlineKeyboardButton(text=f"✏️ {name} ({float(amount):,.0f})", callback_data=f"ed_{t_id}") 
+                btn_del = types.InlineKeyboardButton(text="❌ Удалить", callback_data=f"del_{t_id}") 
+                inline_markup.row(btn_edit, btn_del) 
+    except Exception as e: 
+        log.error(f"show_category_page error: {e}") 
+        res = "⚠️ Ошибка загрузки истории.\n" 
+    finally: 
+        put_conn(conn) 
+    
+    full_text = "" 
+    if prefix_text: 
+        full_text += prefix_text + "\n\n" 
+    full_text += res + "——————————————————\n" + prompts.get(category, "") 
+    send_single(chat_id, full_text, reply_markup=inline_markup, parse_mode="Markdown") 
+
+# ─── КЛАВИАТУРЫ ПОД ЭКРАНОМ (REPLY) ──────────────────────────────────────────
+
 def get_main_keyboard(chat_id: int):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     conn = get_conn()
@@ -353,7 +431,7 @@ def get_main_keyboard(chat_id: int):
     finally:
         put_conn(conn)
     markup.add(types.KeyboardButton("➕ Добавить новый объект"))
-    markup.add(types.KeyboardButton("🗄 АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ"))
+    markup.add(types.KeyboardButton("🗄️ АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ"))
     return markup
 
 def get_archive_keyboard(chat_id: int):
@@ -387,15 +465,17 @@ def get_inside_category_keyboard():
     markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
     return markup
 
-# ─── ДАШБОРД ОБЪЕКТА ─────────────────────────────────────────────────────────
+# ─── ДАШБОРД ОБЪЕКТА ────────────────────────────────────────────────────────
+
 def handle_project_menu_display(chat_id: int, state: dict):
     project = state['project']
     conn = get_conn()
     try:
         cur = conn.cursor()
+        # [ЗАЩИТА] Добавлен фильтр по user_id
         cur.execute(
-            "SELECT category, SUM(amount) FROM transactions WHERE project_name = %s GROUP BY category",
-            (project,)
+            "SELECT category, SUM(amount) FROM transactions WHERE user_id = %s AND project_name = %s GROUP BY category",
+            (chat_id, project)
         )
         sums = dict(cur.fetchall())
     except Exception as e:
@@ -404,24 +484,23 @@ def handle_project_menu_display(chat_id: int, state: dict):
     finally:
         put_conn(conn)
 
-    client_total = sums.get('client', 0) or 0
-    total_spent  = sum(sums.get(c, 0) or 0 for c in ('material', 'worker', 'road', 'unexpected'))
-    balance      = client_total - total_spent
-    status_emoji = "🟩" if balance >= 0 else "🟥"
+    client_total = float(sums.get('client', 0) or 0) 
+    total_spent = sum(float(sums.get(c, 0) or 0) for c in ('material', 'worker', 'road', 'unexpected')) 
+    balance = client_total - total_spent 
+    status_emoji = "🟩" if balance >= 0 else "🟥" 
+    text = ( 
+        f"📂 Объект: *{(project or 'Без названия').upper()}*\n" 
+        f"——————————————————\n" 
+        f"💰 Получено: {client_total:,.0f} сум\n" 
+        f"📉 Потрачено: {total_spent:,.0f} сум\n" 
+        f"{status_emoji} Остаток: *{balance:,.0f} сум*\n" 
+        f"——————————————————\n" 
+        f"Что вносим или смотрим?" 
+    ) 
+    send_single(chat_id, text, reply_markup=get_project_keyboard(is_archived=state.get('is_archived', False)), parse_mode="Markdown") 
 
-    text = (
-     f"📂 Объект: *{(project or 'Без названия').upper()}*\n"
+# ─── ОБРАБОТКА ТЕКСТОВАЯ ЗАПИСИ ──────────────────────────────────────────────
 
-        f"———————————————————\n"
-        f"💰 Получено:  {client_total:,.0f} сум\n"
-        f"📉 Потрачено: {total_spent:,.0f} сум\n"
-        f"{status_emoji} Остаток: *{balance:,.0f} сум*\n"
-        f"———————————————————\n"
-        f"Что вносим или смотрим?"
-    )
-    send_single(chat_id, text, reply_markup=get_project_keyboard(is_archived=state.get('is_archived', False)), parse_mode="Markdown")
-
-# ─── ОБРАБОТКА ТЕКСТОВОЙ ЗАПИСИ ──────────────────────────────────────────────
 def process_construction_entry(message, project: str, category: str):
     chat_id = message.chat.id
     try:
@@ -433,46 +512,33 @@ def process_construction_entry(message, project: str, category: str):
     if not entries:
         send_single(chat_id, "⚠️ Не удалось распознать. Напиши чётче (название + сумма).", reply_markup=get_inside_category_keyboard())
         return
-
     saved = save_entries_to_db(chat_id, project, category, entries)
     if saved == 0:
         send_single(chat_id, "⚠️ Записи не сохранены — проверь суммы (должны быть > 0).", reply_markup=get_inside_category_keyboard())
         return
-
-    # Формируем подтверждение
-    lines = [f"✅ Сохранено {saved} запис{'ь' if saved==1 else 'и' if saved<5 else 'ей'}:\n"]
+    lines = [f"✅ Сохранено {saved} записей:\n"]
     for e in entries:
         amount = e.get('amount', 0) or 0
         if amount <= 0:
             continue
         if category == 'material':
-            lines.append(f"• {e.get('item_name','—')}: {e.get('quantity','?')} × {e.get('unit_price',0):,.0f} = {amount:,.0f} сум")
+            lines.append(f"• {e.get('item_name','—')}: {e.get('quantity','?')} {e.get('unit','шт')} × {e.get('unit_price',0):,.0f} = {amount:,.0f} сум")
         elif category == 'worker':
             lines.append(f"• {e.get('target_name','?')}: {amount:,.0f} сум ({e.get('item_name','Аванс')})")
         else:
             lines.append(f"• {e.get('item_name','—')}: {amount:,.0f} сум")
+    show_category_page(chat_id, project, category, prefix_text="\n".join(lines))
 
-    state = get_state(chat_id)
-    history_text = get_category_history_text(chat_id, project, category)
-    prompts = {
-        "material":   "✍️ Ещё закупки (или ⬅️ Назад):",
-        "worker":     "✍️ Ещё авансы (или ⬅️ Назад):",
-        "road":       "✍️ Ещё дорожные расходы (или ⬅️ Назад):",
-        "unexpected": "✍️ Ещё непредвиденные (или ⬅️ Назад):",
-        "client":     "✍️ Ещё оплата от клиента (или ⬅️ Назад):"
-    }
-    full_text = "\n".join(lines) + f"\n\n{history_text}{prompts.get(category,'')}"
-    send_single(chat_id, full_text, reply_markup=get_inside_category_keyboard(), parse_mode="Markdown")
+# ─── ГЕНЕРАЦИЯ ПОЛНОГО ОТЧЁТА ────────────────────────────────────────────────
 
-# ─── ГЕНЕРАЦИЯ ОТЧЁТА ────────────────────────────────────────────────────────
 def generate_pro_report(chat_id: int, project: str, is_archived: bool = False):
     conn = get_conn()
     try:
         cur = conn.cursor()
+        # [ЗАЩИТА] Добавлен фильтр по user_id
         cur.execute(
-            "SELECT category, item_name, quantity, unit_price, amount, target_name, created_at "
-            "FROM transactions WHERE project_name = %s ORDER BY category, id",
-            (project,)
+            "SELECT category, item_name, quantity, unit, unit_price, amount, target_name, created_at "
+            "FROM transactions WHERE user_id = %s AND project_name = %s ORDER BY category, id", (chat_id, project)
         )
         rows = cur.fetchall()
     except Exception as e:
@@ -482,61 +548,62 @@ def generate_pro_report(chat_id: int, project: str, is_archived: bool = False):
     finally:
         put_conn(conn)
 
-    if not rows:
-        send_single(chat_id, "📊 Нет данных для отчёта.", reply_markup=get_project_keyboard(is_archived))
-        return
+    if not rows: 
+        send_single(chat_id, "📊 Нет данных для отчёта.", reply_markup=get_project_keyboard(is_archived)) 
+        return 
+    
+    cat_labels = { 
+        'material': '🧱 Материалы', 
+        'worker': '👷 Авансы рабочих', 
+        'road': '🚗 Дорожные расходы', 
+        'unexpected': '⚠️ Непредвиденные', 
+        'client': '💰 Оплата от клиента' 
+    } 
+    cats = {} 
+    for r in rows: 
+        cats.setdefault(r[0], []).append(r) 
+    
+    lines = [f"📊 *ОТЧЁТ: {project.upper()}*", f"📅 {datetime.now().strftime('%d.%m.%Y')}", ""] 
+    total_spent = 0 
+    client_total = 0 
+    
+    for cat, label in cat_labels.items(): 
+        if cat not in cats: 
+            continue 
+        lines.append(f"*{label}*") 
+        cat_sum = 0 
+        for r in cats[cat]: 
+            _, item, qty, unit, price, amount, target, created = r 
+            dt = format_db_date(created) 
+            amount_val = float(amount) if amount else 0.0 
+            if cat == 'material': 
+                qty_str = qty if qty else "1" 
+                unit_str = unit if unit else "шт" 
+                price_str = f"{float(price):,.0f}" if price else f"{amount_val:,.0f}" 
+                lines.append(f" • {dt} {item}: {qty_str} {unit_str} × {price_str} = {amount_val:,.0f} сум") 
+            elif cat == 'worker': 
+                lines.append(f" • {dt} {target}: {amount_val:,.0f} сум ({item})") 
+            else: 
+                lines.append(f" • {dt} {item}: {amount_val:,.0f} сум") 
+            cat_sum += amount_val 
+        lines.append(f" *Итого: {cat_sum:,.0f} сум*\n") 
+        if cat == 'client': 
+            client_total += cat_sum 
+        else: 
+            total_spent += cat_sum 
+            
+    balance = client_total - total_spent 
+    status = "🟩 Прибыль" if balance >= 0 else "🟥 Перерасход" 
+    lines += [ 
+        "——————————————————", 
+        f"💰 Получено от клиента: *{client_total:,.0f} сум*", 
+        f"📉 Всего потрачено: *{total_spent:,.0f} сум*", 
+        f"{status}: *{abs(balance):,.0f} сум*" 
+    ] 
+    send_single(chat_id, "\n".join(lines), reply_markup=get_project_keyboard(is_archived), parse_mode="Markdown") 
 
-    cat_labels = {
-        'material':   '🧱 Материалы',
-        'worker':     '👷 Авансы рабочих',
-        'road':       '🚗 Дорожные расходы',
-        'unexpected': '⚠️ Непредвиденные',
-        'client':     '💰 Оплата от клиента'
-    }
-    cats = {}
-    for r in rows:
-        cats.setdefault(r[0], []).append(r)
+# ─── ОБРАБОТЧИК /start ──────────────────────────────────────────────────────
 
-    lines = [f"📊 *ОТЧЁТ: {project.upper()}*", f"📅 {datetime.now().strftime('%d.%m.%Y')}", ""]
-
-    total_spent = 0
-    client_total = 0
-
-    for cat, label in cat_labels.items():
-        if cat not in cats:
-            continue
-        lines.append(f"*{label}*")
-        cat_sum = 0
-        for r in cats[cat]:
-            _, item, qty, price, amount, target, created = r
-            dt = datetime.strptime(created, "%Y-%m-%d").strftime("%d.%m")
-            if cat == 'material':
-                qty_str = qty if qty else "1 шт"
-                price_str = f"{price:,.0f}" if price else f"{amount:,.0f}"
-                lines.append(f"  • {dt} {item}: {qty_str} × {price_str} = {amount:,.0f} сум")
-            elif cat == 'worker':
-                lines.append(f"  • {dt} {target}: {amount:,.0f} сум ({item})")
-            else:
-                lines.append(f"  • {dt} {item}: {amount:,.0f} сум")
-            cat_sum += amount or 0
-        lines.append(f"  *Итого: {cat_sum:,.0f} сум*\n")
-        if cat == 'client':
-            client_total += cat_sum
-        else:
-            total_spent += cat_sum
-
-    balance = client_total - total_spent
-    status  = "🟩 Прибыль" if balance >= 0 else "🟥 Перерасход"
-    lines += [
-        "———————————————————",
-        f"💰 Получено от клиента: *{client_total:,.0f} сум*",
-        f"📉 Всего потрачено:     *{total_spent:,.0f} сум*",
-        f"{status}: *{abs(balance):,.0f} сум*"
-    ]
-
-    send_single(chat_id, "\n".join(lines), reply_markup=get_project_keyboard(is_archived), parse_mode="Markdown")
-
-# ─── ОБРАБОТЧИК /start ───────────────────────────────────────────────────────
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
@@ -546,219 +613,258 @@ def send_welcome(message):
         pass
     state = {'project': None, 'category': None, 'action': None, 'is_archived': False, 'last_msg_id': None}
     save_state(chat_id, state)
-    send_single(chat_id, "🏗 *Прораб-ERP запущена!*\nВыбери объект:", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown")
+    send_single(chat_id, "🏗️ Прораб-ERP запущена!\nВыбери объект:", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown")
 
-# ─── ГЛАВНЫЙ ОБРАБОТЧИК ТЕКСТА ───────────────────────────────────────────────
+# ─── ОБРАБОТЧИК ИНЛАЙН-КНОПОК (РЕДАКТИРОВАНИЕ/УДАЛЕНИЕ) ──────────────────────
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    chat_id = call.message.chat.id
+    data = call.data
+    state = get_state(chat_id)
+
+    try: 
+        bot.answer_callback_query(call.id) 
+    except Exception: 
+        pass 
+    if data.startswith("del_"): 
+        t_id = int(data.split("_")[1]) 
+        conn = get_conn() 
+        try: 
+            cur = conn.cursor() 
+            # [ЗАЩИТА] Проверка принадлежности записи текущему user_id перед удалением 
+            cur.execute("SELECT category FROM transactions WHERE id = %s AND user_id = %s", (t_id, chat_id)) 
+            row = cur.fetchone() 
+            if row: 
+                cat = row[0] 
+                cur.execute("DELETE FROM transactions WHERE id = %s AND user_id = %s", (t_id, chat_id)) 
+                conn.commit() 
+                show_category_page(chat_id, state['project'], cat, prefix_text="❌ Запись успешно удалена.") 
+        except Exception as e: 
+            log.error(f"Callback delete error: {e}") 
+        finally: 
+            put_conn(conn) 
+    elif data.startswith("ed_"): 
+        t_id = int(data.split("_")[1]) 
+        inline_edit = types.InlineKeyboardMarkup(row_width=1) 
+        inline_edit.add( 
+            types.InlineKeyboardButton("📝 Изменить название/текст", callback_data=f"field_{t_id}_item"), 
+            types.InlineKeyboardButton("🔢 Изменить количество/объем", callback_data=f"field_{t_id}_qty"), 
+            types.InlineKeyboardButton("💰 Изменить цену/сумму", callback_data=f"field_{t_id}_amount"), 
+            types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel_edit") 
+        ) 
+        bot.edit_message_text( 
+            chat_id=chat_id, 
+            message_id=call.message.message_id, 
+            text="✏️ *Что именно ты хочешь изменить в этой записи?*", 
+            reply_markup=inline_edit, 
+            parse_mode="Markdown" 
+        ) 
+    elif data.startswith("field_"): 
+        parts = data.split("_") 
+        t_id = int(parts[1]) 
+        field = parts[2] 
+        state['action'] = f"waiting_for_edit_{t_id}_{field}" 
+        save_state(chat_id, state) 
+        field_names = { 
+            "item": "новое НАЗВАНИЕ (описание) записи", 
+            "qty": "новое КОЛИЧЕСТВО и ЕД. ИЗМ. через пробел (например: 15 мешков, 50 кг, 20)", 
+            "amount": "новую СУММУ в сумах (например: 1500000 или 1500.000)" 
+        } 
+        send_single(chat_id, f"📝 Введите {field_names[field]}:", reply_markup=get_inside_category_keyboard()) 
+    elif data == "cancel_edit": 
+        if state.get('category'): 
+            show_category_page(chat_id, state['project'], state['category']) 
+        else: 
+            handle_project_menu_display(chat_id, state) 
+
+# ─── ИЗОЛИРОВАННЫЕ МОДУЛИ ОБРАБОТКИ ТЕКСТА ──────────────────────────────────
+
 NAV_BUTTONS = {
-    "🗄 АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ", "➕ Добавить новый объект",
-    "📦 СДАТЬ ОБЪЕКТ В АРХИВ", "🚀 📊 ОТЧЕТ ДЛЯ КЛИЕНТА",
-    "🧱 Материалы", "👷 Авансы рабочих", "🚗 Дорожные расходы",
-    "⚠️ Непредвиденные", "💰 Оплата от клиента",
-    "⬅️ Назад в меню объекта", "⬅️ Назад к объектам",
+    "🗄️ АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ", "➕ Добавить новый объект", "📦 СДАТЬ ОБЪЕКТ В АРХИВ",
+    "🚀 📊 ОТЧЕТ ДЛЯ КЛИЕНТА", "🧱 Материалы", "👷 Авансы рабочих", "🚗 Дорожные расходы",
+    "⚠️ Непредвиденные", "💰 Оплата от клиента", "⬅️ Назад в меню объекта", "⬅️ Назад к объектам",
     "⬅️ Назад к активным объектам", "⬅️ Назад в архив"
 }
 
 CATEGORIES_MAP = {
-    "🧱 Материалы":        "material",
-    "👷 Авансы рабочих":   "worker",
-    "🚗 Дорожные расходы": "road",
-    "⚠️ Непредвиденные":  "unexpected",
-    "💰 Оплата от клиента":"client"
+    "🧱 Материалы": "material", "👷 Авансы рабочих": "worker", "🚗 Дорожные расходы": "road",
+    "⚠️ Непредвиденные": "unexpected", "💰 Оплата от клиента": "client"
 }
 
-@bot.message_handler(func=lambda m: True)
-def handle_all_text(message):
-    chat_id = message.chat.id
-    text    = message.text
-    state   = get_state(chat_id)
+def handle_edit_action(chat_id: int, text: str, state: dict, action: str):
+    """Модуль изменения полей записи"""
+    parts = action.split("_")
+    t_id = int(parts[3])
+    field = parts[4]
+    new_val = text.strip()
 
-    try:
-        bot.delete_message(chat_id, message.message_id)
-    except Exception:
-        pass
-
-    # ── Пользователь внутри категории и шлёт данные ──
-    if state.get('category') and not state.get('is_archived') and text not in NAV_BUTTONS:
-        process_construction_entry(message, state['project'], state['category'])
-        return
-
-    # ── Навигация ──
-    if text == "⬅️ Назад в меню объекта":
-        state['category'] = None
-        save_state(chat_id, state)
-        handle_project_menu_display(chat_id, state)
-        return
-
-    if text in ("⬅️ Назад к объектам", "⬅️ Назад к активным объектам"):
-        state.update({'project': None, 'category': None, 'action': None, 'is_archived': False})
-        save_state(chat_id, state)
-        send_single(chat_id, "Выбери объект:", reply_markup=get_main_keyboard(chat_id))
-        return
-
-    if text == "⬅️ Назад в архив":
-        state.update({'project': None, 'category': None, 'action': None, 'is_archived': True})
-        save_state(chat_id, state)
-        send_single(chat_id, "Каталог сданных объектов:", reply_markup=get_archive_keyboard(chat_id))
-        return
-
-    if text == "🗄 АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ":
-        send_single(chat_id, "📂 Архив:", reply_markup=get_archive_keyboard(chat_id))
-        return
-
-    if text == "➕ Добавить новый объект":
-        state['action'] = 'waiting_for_project_name'
-        save_state(chat_id, state)
-        send_single(chat_id, "✍️ Напиши название нового объекта:")
-        return
-
-    if state.get('action') == 'waiting_for_project_name':
-        project_name = text.strip()
-        if not project_name:
-            send_single(chat_id, "⚠️ Название не может быть пустым. Попробуй ещё раз:")
-            return
-        conn = get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute("INSERT INTO projects (user_id, name, status) VALUES (%s, %s, 'active')", (chat_id, project_name))
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            log.error(f"Add project error: {e}")
-            send_single(chat_id, "⚠️ Ошибка создания объекта. Попробуй снова.", reply_markup=get_main_keyboard(chat_id))
-            return
-        finally:
-            put_conn(conn)
-        state['action'] = None
-        save_state(chat_id, state)
-        send_single(chat_id, f"✅ Объект *{project_name}* создан!", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown")
-        return
-
-    if text.endswith(" (Архив)"):
-        pure_name = text[:-8]
-        state.update({'project': pure_name, 'is_archived': True, 'category': None})
-        save_state(chat_id, state)
-        send_single(chat_id, f"🗃 Архивный объект: *{pure_name}*", reply_markup=get_project_keyboard(is_archived=True), parse_mode="Markdown")
-        return
-
-    if text == "📦 СДАТЬ ОБЪЕКТ В АРХИВ" and state.get('project'):
-        name = state['project']
-        conn = get_conn()
-        try:
-            cur = conn.cursor()
-            cur.execute("UPDATE projects SET status = 'archived' WHERE name = %s AND user_id = %s", (name, chat_id))
-            conn.commit()
-        except Exception as e:
-            conn.rollback()
-            log.error(f"Archive project error: {e}")
-        finally:
-            put_conn(conn)
-        state.update({'project': None, 'category': None})
-        save_state(chat_id, state)
-        send_single(chat_id, f"📦 Объект *{name}* перенесён в архив.", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown")
-        return
-
-    if text == "🚀 📊 ОТЧЕТ ДЛЯ КЛИЕНТА" and state.get('project'):
-        generate_pro_report(chat_id, state['project'], is_archived=state.get('is_archived', False))
-        return
-
-    # ── Выбор активного объекта ──
     conn = get_conn()
     try:
         cur = conn.cursor()
-        cur.execute("SELECT name FROM projects WHERE user_id = %s AND status = 'active'", (chat_id,))
-        active = [r[0] for r in cur.fetchall()]
+        # [ЗАЩИТА] Выборка записи только текущего пользователя
+        cur.execute("SELECT category, quantity, unit, unit_price, amount FROM transactions WHERE id = %s AND user_id = %s", (t_id, chat_id))
+        row = cur.fetchone()
+        if row:
+            cat, old_qty, old_unit, old_price, old_amount = row
+            if field == "item":
+                cur.execute("UPDATE transactions SET item_name = %s WHERE id = %s AND user_id = %s", (new_val, t_id, chat_id))
+            elif field == "qty":
+                sub_parts = new_val.split(" ", 1)
+                parsed_qty = sub_parts[0]
+                parsed_unit = sub_parts[1] if len(sub_parts) > 1 else old_unit
+                cur.execute("UPDATE transactions SET quantity = %s, unit = %s WHERE id = %s AND user_id = %s", (parsed_qty, parsed_unit, t_id, chat_id))
+                if cat == 'material' and old_price:
+                    try:
+                        q = float(parsed_qty)
+                        new_amount = q * float(old_price)
+                        cur.execute("UPDATE transactions SET amount = %s WHERE id = %s AND user_id = %s", (new_amount, t_id, chat_id))
+                    except ValueError:
+                        pass
+            elif field == "amount":
+                if "." in new_val and len(new_val.split(".")[1]) == 3:
+                    try:
+                        amount_val = float(new_val.replace(".", ""))
+                    except ValueError:
+                        amount_val = float(new_val.replace(" ", ""))
+                else:
+                    try:
+                        amount_val = float(new_val.replace(" ", ""))
+                    except ValueError:
+                        amount_val = float(new_val)
+                cur.execute("UPDATE transactions SET amount = %s WHERE id = %s AND user_id = %s", (amount_val, t_id, chat_id))
+                if cat == 'material' and old_qty:
+                    try:
+                        q = float(old_qty)
+                        if q > 0:
+                            new_price = amount_val / q
+                            cur.execute("UPDATE transactions SET unit_price = %s WHERE id = %s AND user_id = %s", (new_price, t_id, chat_id))
+                    except ValueError:
+                        pass
+            conn.commit()
+            state['action'] = None
+            save_state(chat_id, state)
+            show_category_page(chat_id, state['project'], cat, prefix_text="✅ Запись успешно обновлена!")
+            return
     except Exception as e:
-        log.error(f"Fetch projects error: {e}")
-        active = []
+        log.error(f"Error updating field: {e}")
+        send_single(chat_id, "⚠️ Ошибка обновления данных. Проверь формат цифр и попробуй снова.")
     finally:
         put_conn(conn)
 
-    if text in active:
-        state.update({'project': text, 'is_archived': False, 'category': None})
+def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
+    """Модуль навигации по меню и создания объектов"""
+    if text == "⬅️ Назад в меню объекта":
+        state['category'] = None
+        state['action'] = None
         save_state(chat_id, state)
         handle_project_menu_display(chat_id, state)
         return
 
-    # ── Выбор категории ──
-    if state.get('project') and text in CATEGORIES_MAP:
-        cat = CATEGORIES_MAP[text]
-        if state.get('is_archived'):
-            history = get_category_history_text(chat_id, state['project'], cat)
-            send_single(chat_id, f"📍 [АРХИВ] {state['project']}\n\n{history}⚠️ Объект закрыт.",
-                        reply_markup=get_project_keyboard(is_archived=True), parse_mode="Markdown")
-            return
-        state['category'] = cat
-        save_state(chat_id, state)
-        history = get_category_history_text(chat_id, state['project'], cat)
-        prompts = {
-            "material":   "✍️ Жду закупку материалов (текст или голос):",
-            "worker":     "✍️ Жду аванс рабочего (текст или голос):",
-            "road":       "✍️ Жду дорожный расход (текст или голос):",
-            "unexpected": "✍️ Жду непредвиденный расход (текст или голос):",
-            "client":     "✍️ Жду сумму от клиента (текст или голос):"
-        }
-        send_single(chat_id, f"📍 {state['project']}\n\n{history}{prompts[cat]}",
-                    reply_markup=get_inside_category_keyboard(), parse_mode="Markdown")
-        return
-
-    send_single(chat_id, "⚠️ Выбери объект из меню ниже.", reply_markup=get_main_keyboard(chat_id))
-
-# ─── ОБРАБОТЧИК ГОЛОСА (исправление #3 — был обрезан) ───────────────────────
-@bot.message_handler(content_types=['voice'])
-def handle_voice_entry(message):
-    chat_id = message.chat.id
-    state   = get_state(chat_id)
-
-    try:
-        bot.delete_message(chat_id, message.message_id)
-    except Exception:
-        pass
-
-    if not state.get('project') or not state.get('category') or state.get('is_archived'):
-        send_single(chat_id, "⚠️ Зайди в активный объект → категорию, и только потом надиктовывай голос.")
-        return
-
-    # Скачиваем аудио
-    try:
-        file_info  = bot.get_file(message.voice.file_id)
-        file_url   = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_info.file_path}"
-        voice_bytes = requests.get(file_url, timeout=15).content
-    except Exception as e:
-        log.error(f"Voice download error: {e}")
-        send_single(chat_id, "⚠️ Не удалось скачать голосовое. Попробуй ещё раз.", reply_markup=get_inside_category_keyboard())
-        return
-
-    # Отправляем в Gemini
-    entries = parse_smart_voice(voice_bytes, state['category'])
-    if not entries:
-        send_single(chat_id, "⚠️ Не удалось распознать голос. Попробуй надиктовать чётче.", reply_markup=get_inside_category_keyboard())
-        return
-
-    saved = save_entries_to_db(chat_id, state['project'], state['category'], entries)
-    if saved == 0:
-        send_single(chat_id, "⚠️ Записи не сохранены — проверь суммы в сообщении.", reply_markup=get_inside_category_keyboard())
-        return
-
-    lines = [f"🎤 Распознано и сохранено {saved} запис{'ь' if saved==1 else 'и' if saved<5 else 'ей'}:\n"]
-    for e in entries:
-        amount = e.get('amount', 0) or 0
-        if amount <= 0:
-            continue
-        cat = state['category']
-        if cat == 'material':
-            lines.append(f"• {e.get('item_name','—')}: {e.get('quantity','?')} × {e.get('unit_price',0):,.0f} = {amount:,.0f} сум")
-        elif cat == 'worker':
-            lines.append(f"• {e.get('target_name','?')}: {amount:,.0f} сум ({e.get('item_name','Аванс')})")
-        else:
-            lines.append(f"• {e.get('item_name','—')}: {amount:,.0f} сум")
-
-    history = get_category_history_text(chat_id, state['project'], state['category'])
-    send_single(chat_id, "\n".join(lines) + f"\n\n{history}✍️ Можно добавить ещё (или ⬅️ Назад):",
-                reply_markup=get_inside_category_keyboard(), parse_mode="Markdown")
-
-# ─── ЗАПУСК ──────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    init_db()
-    threading.Thread(target=run_health_check_server, daemon=True).start()
-    log.info("Бот запущен. Ожидаю сообщения...")
-    bot.infinity_polling(timeout=30, long_polling_timeout=30)
+    if text in ("⬅️ Назад к объектам", "⬅️ Назад к активным объектам"): 
+        state.update({'project': None, 'category': None, 'action': None, 'is_archived': False}) 
+        save_state(chat_id, state) 
+        send_single(chat_id, "Выбери объект:", reply_markup=get_main_keyboard(chat_id)) 
+        return 
+    if text == "⬅️ Назад в архив": 
+        state.update({'project': None, 'category': None, 'action': None, 'is_archived': True}) 
+        save_state(chat_id, state) 
+        send_single(chat_id, "Каталог сданных объектов:", reply_markup=get_archive_keyboard(chat_id)) 
+        return 
+    if text == "🗄️ АРХИВ ЗАВЕРШЕННЫХ ОБЪЕКТОВ": 
+        send_single(chat_id, "📂 Архив:", reply_markup=get_archive_keyboard(chat_id)) 
+        return 
+    if text == "➕ Добавить новый объект": 
+        state['action'] = 'waiting_for_project_name' 
+        save_state(chat_id, state) 
+        send_single(chat_id, "✍️ Напиши название нового объекта:") 
+        return 
+    if state.get('action') == 'waiting_for_project_name': 
+        project_name = text.strip() 
+        if not project_name: 
+            send_single(chat_id, "⚠️ Название не может быть пустым. Попробуй ещё раз:") 
+            return 
+        conn = get_conn() 
+        try: 
+            cur = conn.cursor() 
+            cur.execute("INSERT INTO projects (user_id, name, status) VALUES (%s, %s, 'active') ON CONFLICT (user_id, name) DO NOTHING", (chat_id, project_name)) 
+            conn.commit() 
+        except Exception as e: 
+            conn.rollback() 
+            log.error(f"Add project error: {e}") 
+            send_single(chat_id, "⚠️ Ошибка создания объекта. Попробуй снова.", reply_markup=get_main_keyboard(chat_id)) 
+            return 
+        finally: 
+            put_conn(conn) 
+        state['action'] = None 
+        save_state(chat_id, state) 
+        send_single(chat_id, f"✅ Объект *{project_name}* создан!", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown") 
+        return 
+    if text.endswith(" (Архив)"): 
+        pure_name = text[:-8] 
+        state.update({'project': pure_name, 'is_archived': True, 'category': None}) 
+        save_state(chat_id, state) 
+        send_single(chat_id, f"🗄️ Архивный объект: *{pure_name}*", reply_markup=get_project_keyboard(is_archived=True), parse_mode="Markdown") 
+        return 
+    if text == "📦 СДАТЬ ОБЪЕКТ В АРХИВ" and state.get('project'): 
+        name = state['project'] 
+        conn = get_conn() 
+        try: 
+            cur = conn.cursor() 
+            cur.execute("UPDATE projects SET status = 'archived' WHERE name = %s AND user_id = %s", (name, chat_id)) 
+            conn.commit() 
+        except Exception as e: 
+            conn.rollback() 
+            log.error(f"Archive project error: {e}") 
+        finally: 
+            put_conn(conn) 
+        state.update({'project': None, 'category': None}) 
+        save_state(chat_id, state) 
+        send_single(chat_id, f"📦 Объект *{name}* перенесён в архив.", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown") 
+        return 
+    if text == "🚀 📊 ОТЧЕТ ДЛЯ КЛИЕНТА" and state.get('project'): 
+        generate_pro_report(chat_id, state['project'], is_archived=state.get('is_archived', False)) 
+        return 
+    
+    # Выбор активного объекта 
+    conn = get_conn() 
+    try: 
+        cur = conn.cursor() 
+        cur.execute("SELECT name FROM projects WHERE user_id = %s AND status = 'active'", (chat_id,)) 
+        active = [r[0] for r in cur.fetchall()] 
+    except Exception as e: 
+        log.error(f"Fetch projects error: {e}") 
+        active = [] 
+    finally: 
+        put_conn(conn) 
+    if text in active: 
+        state.update({'project': text, 'is_archived': False, 'category': None}) 
+        save_state(chat_id, state) 
+        handle_project_menu_display(chat_id, state) 
+        return 
+        
+    # Выбор категории внутри объекта (Архив / Активный) 
+    if state.get('project') and text in CATEGORIES_MAP: 
+        cat = CATEGORIES_MAP[text] 
+        if state.get('is_archived'): 
+            conn = get_conn() 
+            try: 
+                cur = conn.cursor() 
+                # [ЗАЩИТА] Добавлен фильтр user_id для архивной истории 
+                cur.execute( 
+                    "SELECT item_name, quantity, unit, unit_price, amount, target_name, created_at " 
+                    "FROM transactions WHERE user_id = %s AND project_name = %s AND category = %s ORDER BY id ASC", 
+                    (chat_id, state['project'], cat) 
+                ) 
+                rows = cur.fetchall() 
+                if cat == 'worker': 
+                    history = "📖 *Взаиморасчеты:*\n" 
+                    for r in rows: 
+                        dt = format_db_date(r[6]) 
+                        history += f"• {dt} — {r[5]} — {float(r[4]):,.0f} сум ({r[0]})\n" 
+                elif cat == 'material': 
+                    history = "📖 *Материалы:*\n" 
+                    for r in rows: 
+                        dt = format_db_date(r[6]) 
+                        price_val = float(r[3]) if r[3] else float(r[4]) 
+                        history += f"• {dt} — {r[0]}: {r[1] or '1'} {r[2] or 'шт'} × {price_val:,.0f} = {float(r[4]):
