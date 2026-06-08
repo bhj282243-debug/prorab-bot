@@ -396,7 +396,15 @@ def show_category_page(chat_id: int, project: str, category: str, prefix_text: s
     if prefix_text:
         full_text += prefix_text + "\n\n"
     full_text += res + "——————————————————\n" + prompts.get(category, "")
-    send_single(chat_id, full_text, reply_markup=inline_markup, parse_mode="Markdown")
+
+    # Сначала показываем Reply-клавиатуру с кнопкой Назад
+    back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+    back_markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
+    bot.send_message(chat_id, full_text, reply_markup=back_markup, parse_mode="Markdown")
+
+    # Потом отправляем инлайн-кнопки редактирования если есть
+    if inline_markup.keyboard:
+        bot.send_message(chat_id, "✏️ Редактировать или удалить:", reply_markup=inline_markup)
 
 # --- КЛАВИАТУРЫ ПОД ЭКРАНОМ (REPLY) ---
 def get_main_keyboard(chat_id: int):
@@ -656,33 +664,12 @@ def handle_callback(call):
 
     elif data.startswith("ed_"):
         t_id = int(data.split("_")[1])
-        inline_edit = types.InlineKeyboardMarkup(row_width=1)
-        inline_edit.add(
-            types.InlineKeyboardButton("📝 Изменить название/текст", callback_data=f"field_{t_id}_item"),
-            types.InlineKeyboardButton("📐 Изменить количество/объём", callback_data=f"field_{t_id}_qty"),
-            types.InlineKeyboardButton("💰 Изменить цену/сумму", callback_data=f"field_{t_id}_amount"),
-            types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel_edit")
-        )
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            text="✏️ *Что именно ты хочешь изменить в этой записи?*",
-            reply_markup=inline_edit,
-            parse_mode="Markdown"
-        )
-
-    elif data.startswith("field_"):
-        parts = data.split("_")
-        t_id = int(parts[1])
-        field = parts[2]
-        state['action'] = f"waiting_for_edit_{t_id}_{field}"
+        # Сразу ждём новую сумму — просто введи число
+        state['action'] = f"waiting_for_edit_{t_id}_amount"
         save_state(chat_id, state)
-        field_names = {
-            "item": "новое НАЗВАНИЕ (описание) записи",
-            "qty": "новое КОЛИЧЕСТВО и ЕД. ИЗМ. через пробел (например: 15 мешков, 50 кг, 20)",
-            "amount": "новую СУММУ в сумах (например: 1500000 или 1500.000)"
-        }
-        send_single(chat_id, f"📝 Введите {field_names[field]}:", reply_markup=get_inside_category_keyboard())
+        back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        back_markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
+        bot.send_message(chat_id, "✏️ Введи новую сумму (например: 1500000):", reply_markup=back_markup)
 
     elif data == "cancel_edit":
         if state.get('category'):
