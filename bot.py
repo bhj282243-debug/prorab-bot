@@ -664,12 +664,27 @@ def handle_callback(call):
 
     elif data.startswith("ed_"):
         t_id = int(data.split("_")[1])
-        # Сразу ждём новую сумму — просто введи число
-        state['action'] = f"waiting_for_edit_{t_id}_amount"
+        inline_edit = types.InlineKeyboardMarkup(row_width=1)
+        inline_edit.add(
+            types.InlineKeyboardButton("📝 Изменить название", callback_data=f"field_{t_id}_item"),
+            types.InlineKeyboardButton("💰 Изменить сумму", callback_data=f"field_{t_id}_amount"),
+            types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel_edit")
+        )
+        bot.send_message(chat_id, "✏️ Что изменить?", reply_markup=inline_edit)
+
+    elif data.startswith("field_"):
+        parts = data.split("_")
+        t_id = int(parts[1])
+        field = parts[2]
+        state['action'] = f"waiting_for_edit_{t_id}_{field}"
         save_state(chat_id, state)
+        if field == "item":
+            hint = "📝 Введи новое название:"
+        else:
+            hint = "💰 Введи новую сумму (например: 1500000):"
         back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
         back_markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
-        bot.send_message(chat_id, "✏️ Введи новую сумму (например: 1500000):", reply_markup=back_markup)
+        bot.send_message(chat_id, hint, reply_markup=back_markup)
 
     elif data == "cancel_edit":
         if state.get('category'):
