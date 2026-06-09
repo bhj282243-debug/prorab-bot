@@ -237,6 +237,18 @@ def parse_smart_voice(voice_bytes: bytes, category: str):
 
 ПРАВИЛО ДЛЯ ЧИСЕЛ: «пять миллионов» → 5000000, «полтора миллиона» → 1500000.
 
+СТРОИТЕЛЬНЫЕ ТЕРМИНЫ — распознавай точно (не заменяй похожими словами):
+- "гипсокартон" (не "картон", не "гипс")
+- "подвес" (не "пакет", не "подвез")
+- "профиль" (не "профи")
+- "арматура" (не "аппаратура")
+- "цемент", "кирпич", "плитка", "кафель", "шпаклёвка", "грунтовка"
+- "саморез", "дюбель", "анкер", "уголок", "швеллер"
+- "сетка", "утеплитель", "пеноблок", "газоблок"
+- "ламинат", "линолеум", "паркет"
+- "труба", "кабель", "провод", "розетка", "выключатель"
+Если слово похоже на строительный термин — используй строительный термин.
+
 ПРАВИЛО ДЛЯ ЕДИНИЦ ИЗМЕРЕНИЯ (только для категории material):
 Разделяй количество и единицу измерения.
 Например: "десять метров профиля" -> item_name: "профиль", quantity: "10", unit: "м"
@@ -396,7 +408,10 @@ def show_category_page(chat_id: int, project: str, category: str, prefix_text: s
     if prefix_text:
         full_text += prefix_text + "\n\n"
     full_text += res + "——————————————————\n" + prompts.get(category, "")
-    send_single(chat_id, full_text, reply_markup=inline_markup, parse_mode="Markdown")
+
+    # Добавляем кнопку Назад в инлайн-клавиатуру последней строкой
+    inline_markup.add(types.InlineKeyboardButton("⬅️ Назад в меню объекта", callback_data="go_back_project"))
+    bot.send_message(chat_id, full_text, reply_markup=inline_markup, parse_mode="Markdown")
 
 # --- КЛАВИАТУРЫ ПОД ЭКРАНОМ (REPLY) ---
 def get_main_keyboard(chat_id: int):
@@ -437,6 +452,7 @@ def get_project_keyboard(is_archived=False):
         markup.add(types.KeyboardButton("📦 СДАТЬ ОБЪЕКТ В АРХИВ"))
     else:
         markup.add(types.KeyboardButton("⬅️ Назад в архив"))
+        markup.add(types.KeyboardButton("🗑️ УДАЛИТЬ ОБЪЕКТ НАВСЕГДА"))
     return markup
 
 def get_inside_category_keyboard():
@@ -658,18 +674,11 @@ def handle_callback(call):
         t_id = int(data.split("_")[1])
         inline_edit = types.InlineKeyboardMarkup(row_width=1)
         inline_edit.add(
-            types.InlineKeyboardButton("📝 Изменить название/текст", callback_data=f"field_{t_id}_item"),
-            types.InlineKeyboardButton("📐 Изменить количество/объём", callback_data=f"field_{t_id}_qty"),
-            types.InlineKeyboardButton("💰 Изменить цену/сумму", callback_data=f"field_{t_id}_amount"),
+            types.InlineKeyboardButton("📝 Изменить название", callback_data=f"field_{t_id}_item"),
+            types.InlineKeyboardButton("💰 Изменить сумму", callback_data=f"field_{t_id}_amount"),
             types.InlineKeyboardButton("🔙 Отмена", callback_data="cancel_edit")
         )
-        bot.edit_message_text(
-            chat_id=chat_id,
-            message_id=call.message.message_id,
-            text="✏️ *Что именно ты хочешь изменить в этой записи?*",
-            reply_markup=inline_edit,
-            parse_mode="Markdown"
-        )
+        bot.send_message(chat_id, "✏️ Что изменить?", reply_markup=inline_edit)
 
     elif data.startswith("field_"):
         parts = data.split("_")
@@ -677,25 +686,26 @@ def handle_callback(call):
         field = parts[2]
         state['action'] = f"waiting_for_edit_{t_id}_{field}"
         save_state(chat_id, state)
-        field_names = {
-            "item": "новое НАЗВАНИЕ (описание) записи",
-            "qty": "новое КОЛИЧЕСТВО и ЕД. ИЗМ. через пробел (например: 15 мешков, 50 кг, 20)",
-            "amount": "новую СУММУ в сумах (например: 1500000 или 1500.000)"
-        }
-        send_single(chat_id, f"📝 Введите {field_names[field]}:", reply_markup=get_inside_category_keyboard())
-
-    elif data == "cancel_edit":
-        if state.get('category'):
-            show_category_page(chat_id, state['project'], state['category'])
+        if field == "item":
+            hint = "📝 Введи новое название:"
         else:
-            handle_project_menu_display(chat_id, state)
+            hint = "💰 Введи новую сумму (например: 1500000):"
+        back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        back_markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
+        bot.send_message(chat_id, hint, reply_markup=back_markup)
+
+    elif data == "cancel_edit" or data == "go_back_project":
+        state['category'] = None
+        state['action'] = None
+        save_state(chat_id, state)
+        handle_project_menu_display(chat_id, state)
 
 # --- КНОПКИ НАВИГАЦИИ ---
 NAV_BUTTONS = {
     "🗄️ АРХИВ ЗАВЕРШЁННЫХ ОБЪЕКТОВ", "➕ Добавить новый объект", "📦 СДАТЬ ОБЪЕКТ В АРХИВ",
     "🚀 📊 ОТЧЁТ ДЛЯ КЛИЕНТА", "🧱 Материалы", "👷 Авансы рабочих", "🚗 Дорожные расходы",
     "⚠️ Непредвиденные", "💰 Оплата от клиента", "⬅️ Назад в меню объекта", "⬅️ Назад к объектам",
-    "⬅️ Назад к активным объектам", "⬅️ Назад в архив"
+    "⬅️ Назад к активным объектам", "⬅️ Назад в архив", "🗑️ УДАЛИТЬ ОБЪЕКТ НАВСЕГДА"
 }
 
 CATEGORIES_MAP = {
@@ -801,7 +811,12 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
         conn = get_conn()
         try:
             cur = conn.cursor()
-            cur.execute("INSERT INTO projects (user_id, name, status) VALUES (%s, %s, 'active') ON CONFLICT (user_id, name) DO NOTHING", (chat_id, project_name))
+            # Проверяем только активные объекты с таким именем
+            cur.execute("SELECT id FROM projects WHERE user_id = %s AND name = %s AND status = 'active'", (chat_id, project_name))
+            if cur.fetchone():
+                send_single(chat_id, f"⚠️ Активный объект *{project_name}* уже существует. Выбери другое название:", parse_mode="Markdown")
+                return
+            cur.execute("INSERT INTO projects (user_id, name, status) VALUES (%s, %s, 'active')", (chat_id, project_name))
             conn.commit()
         except Exception as e:
             conn.rollback()
@@ -841,6 +856,24 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
 
     if text == "🚀 📊 ОТЧЁТ ДЛЯ КЛИЕНТА" and state.get('project'):
         generate_pro_report(chat_id, state['project'], is_archived=state.get('is_archived', False))
+        return
+
+    if text == "🗑️ УДАЛИТЬ ОБЪЕКТ НАВСЕГДА" and state.get('project') and state.get('is_archived'):
+        name = state['project']
+        conn = get_conn()
+        try:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM transactions WHERE project_name = %s AND user_id = %s", (name, chat_id))
+            cur.execute("DELETE FROM projects WHERE name = %s AND user_id = %s", (name, chat_id))
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            log.error(f"Delete project error: {e}")
+        finally:
+            put_conn(conn)
+        state.update({'project': None, 'category': None, 'is_archived': True})
+        save_state(chat_id, state)
+        send_single(chat_id, f"🗑️ Объект *{name}* удалён навсегда.", reply_markup=get_archive_keyboard(chat_id), parse_mode="Markdown")
         return
 
     # Выбор активного объекта
