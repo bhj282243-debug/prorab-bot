@@ -1,0 +1,271 @@
+"""
+api.py — FastAPI маршруты для веб-интерфейса Прораб-ERP
+Подключается к той же БД что и bot.py
+Добавь в bot.py в самый конец, перед if __name__ == "__main__":
+
+    from api import app as web_app
+    import uvicorn
+    threading.Thread(target=lambda: uvicorn.run(web_app, host="0.0.0.0", port=8000), daemon=True).start()
+
+Или запусти отдельно: uvicorn api:app --port 8000
+"""
+
+import os
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
+import psycopg2
+from psycopg2 import pool
+from datetime import datetime
+
+# --- КОНФИГ ---
+DATABASE_URL = os.environ.get("DATABASE_URL")
+
+# --- ПУЛ БД (тот же DATABASE_URL что в bot.py) ---
+db_pool = psycopg2.pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
+
+def get_conn():
+    return db_pool.getconn()
+
+def put_conn(conn):
+    db_pool.putconn(conn)
+
+# --- FASTAPI ---
+app = FastAPI(title="Прораб-ERP API")
+
+# CORS — разрешаем запросы из Telegram Mini App
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- ВСПОМОГАТЕЛЬНЫЕ ---
+def format_date(date_val) -> str:
+    if isinstance(date_val, datetime):
+        return date_val.strftime("%d.%m")
+    elif isinstance(date_val, str):
+        try:
+            return datetime.strptime(date_val.split()[0], "%Y-%m-%d").strftime("%d.%m")
+        except Exception:
+            return date_val[:5]
+    return "--"
+
+# ─── МАРШРУТЫ ───────────────────────────────────────────
+
+# GET /api/projects?user_id=123456
+# Возвращает все активные проекты пользователя
+@app.get("/api/projects")
+def get_projects(user_id: int):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, status FROM projects WHERE user_id = %s AND status = 'active' ORDER BY id",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        return [{"id": r[0], "name": r[1], "status": r[2]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/projects/archived?user_id=123456
+# Возвращает архивные проекты
+@app.get("/api/projects/archived")
+def get_archived_projects(user_id: int):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, status FROM projects WHERE user_id = %s AND status = 'archived' ORDER BY id",
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        return [{"id": r[0], "name": r[1], "status": r[2]} for r in rows]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/projects/{project_id}/summary?user_id=123456
+# Возвращает итоги по проекту (потрачено, получено, баланс)
+@app.get("/api/projects/{project_name}/summary")
+def get_project_summary(project_name: str, user_id: int):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT category, SUM(amount) FROM transactions WHERE user_id = %s AND project_name = %s GROUP BY category",
+            (user_id, project_name)
+        )
+        sums = dict(cur.fetchall())
+
+        spent_cats = ["material", "worker", "road", "unexpected"]
+        total_spent = sum(float(sums.get(c, 0) or 0) for c in spent_cats)
+        total_client = float(sums.get("client", 0) or 0)
+        my_profit = float(sums.get("profit", 0) or 0)
+        balance = total_client - total_spent
+
+        cat_breakdown = {}
+        for cat in spent_cats:
+            if sums.get(cat):
+                cat_breakdown[cat] = float(sums[cat])
+
+        return {
+            "project_name": project_name,
+            "total_spent": total_spent,
+            "total_client": total_client,
+            "my_profit": my_profit,
+            "balance": balance,
+            "categories": cat_breakdown,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/transactions?user_id=123456&project_name=ЖК Dream Park
+# Возвращает все транзакции проекта
+@app.get("/api/transactions")
+def get_transactions(user_id: int, project_name: str):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, category, item_name, quantity, unit,
+                   unit_price, amount, target_name, created_at
+            FROM transactions
+            WHERE user_id = %s AND project_name = %s
+            ORDER BY id DESC
+            """,
+            (user_id, project_name)
+        )
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "id": r[0],
+                "category": r[1],
+                "item_name": r[2],
+                "quantity": r[3],
+                "unit": r[4],
+                "unit_price": float(r[5]) if r[5] else None,
+                "amount": float(r[6]) if r[6] else 0,
+                "target_name": r[7],
+                "date": format_date(r[8]),
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/transactions/delete
+# Удаляет транзакцию
+class DeleteRequest(BaseModel):
+    user_id: int
+    transaction_id: int
+
+@app.post("/api/transactions/delete")
+def delete_transaction(req: DeleteRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM transactions WHERE id = %s AND user_id = %s",
+            (req.transaction_id, req.user_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Запись не найдена")
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/projects/archive
+# Сдать объект в архив
+class ArchiveRequest(BaseModel):
+    user_id: int
+    project_name: str
+
+@app.post("/api/projects/archive")
+def archive_project(req: ArchiveRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE projects SET status = 'archived' WHERE user_id = %s AND name = %s",
+            (req.user_id, req.project_name)
+        )
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/projects/restore
+# Восстановить из архива
+@app.post("/api/projects/restore")
+def restore_project(req: ArchiveRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE projects SET status = 'active' WHERE user_id = %s AND name = %s",
+            (req.user_id, req.project_name)
+        )
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/projects/delete
+# Удалить объект навсегда (только из архива)
+@app.post("/api/projects/delete")
+def delete_project(req: ArchiveRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM transactions WHERE user_id = %s AND project_name = %s",
+            (req.user_id, req.project_name)
+        )
+        cur.execute(
+            "DELETE FROM projects WHERE user_id = %s AND name = %s AND status = 'archived'",
+            (req.user_id, req.project_name)
+        )
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /health — проверка что API живой
+@app.get("/health")
+def health():
+    return {"status": "ok"}
