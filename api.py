@@ -1,13 +1,6 @@
 """
 api.py — FastAPI маршруты для веб-интерфейса Прораб-ERP
 Подключается к той же БД что и bot.py
-Добавь в bot.py в самый конец, перед if __name__ == "__main__":
-
-    from api import app as web_app
-    import uvicorn
-    threading.Thread(target=lambda: uvicorn.run(web_app, host="0.0.0.0", port=8000), daemon=True).start()
-
-Или запусти отдельно: uvicorn api:app --port 8000
 """
 
 import os
@@ -44,6 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- ОТДАЁМ HTML ФАЙЛ ---
+@app.get("/")
+def serve_webapp():
+    return FileResponse("prorab-webapp.html")
+
 # --- ВСПОМОГАТЕЛЬНЫЕ ---
 def format_date(date_val) -> str:
     if isinstance(date_val, datetime):
@@ -58,7 +56,6 @@ def format_date(date_val) -> str:
 # ─── МАРШРУТЫ ───────────────────────────────────────────
 
 # GET /api/projects?user_id=123456
-# Возвращает все активные проекты пользователя
 @app.get("/api/projects")
 def get_projects(user_id: int):
     conn = get_conn()
@@ -77,7 +74,6 @@ def get_projects(user_id: int):
 
 
 # GET /api/projects/archived?user_id=123456
-# Возвращает архивные проекты
 @app.get("/api/projects/archived")
 def get_archived_projects(user_id: int):
     conn = get_conn()
@@ -95,8 +91,7 @@ def get_archived_projects(user_id: int):
         put_conn(conn)
 
 
-# GET /api/projects/{project_id}/summary?user_id=123456
-# Возвращает итоги по проекту (потрачено, получено, баланс)
+# GET /api/projects/{project_name}/summary?user_id=123456
 @app.get("/api/projects/{project_name}/summary")
 def get_project_summary(project_name: str, user_id: int):
     conn = get_conn()
@@ -134,7 +129,6 @@ def get_project_summary(project_name: str, user_id: int):
 
 
 # GET /api/transactions?user_id=123456&project_name=ЖК Dream Park
-# Возвращает все транзакции проекта
 @app.get("/api/transactions")
 def get_transactions(user_id: int, project_name: str):
     conn = get_conn()
@@ -172,7 +166,6 @@ def get_transactions(user_id: int, project_name: str):
 
 
 # POST /api/transactions/delete
-# Удаляет транзакцию
 class DeleteRequest(BaseModel):
     user_id: int
     transaction_id: int
@@ -198,7 +191,6 @@ def delete_transaction(req: DeleteRequest):
 
 
 # POST /api/projects/archive
-# Сдать объект в архив
 class ArchiveRequest(BaseModel):
     user_id: int
     project_name: str
@@ -222,7 +214,6 @@ def archive_project(req: ArchiveRequest):
 
 
 # POST /api/projects/restore
-# Восстановить из архива
 @app.post("/api/projects/restore")
 def restore_project(req: ArchiveRequest):
     conn = get_conn()
@@ -242,7 +233,6 @@ def restore_project(req: ArchiveRequest):
 
 
 # POST /api/projects/delete
-# Удалить объект навсегда (только из архива)
 @app.post("/api/projects/delete")
 def delete_project(req: ArchiveRequest):
     conn = get_conn()
@@ -265,7 +255,7 @@ def delete_project(req: ArchiveRequest):
         put_conn(conn)
 
 
-# GET /health — проверка что API живой
+# GET /health
 @app.get("/health")
 def health():
     return {"status": "ok"}
