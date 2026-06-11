@@ -38,7 +38,7 @@ app.add_middleware(
 )
 
 # --- ОТДАЁМ HTML ФАЙЛ ---
-@app.get("/")
+@app.get("/app")
 def serve_webapp():
     return FileResponse("prorab-webapp.html")
 
