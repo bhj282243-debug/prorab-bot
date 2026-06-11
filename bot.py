@@ -856,6 +856,20 @@ def handle_voice(message):
             pass
         send_single(chat_id, "⚠️ Сначала выбери объект и категорию.", reply_markup=get_main_keyboard(chat_id))
 
+@bot.message_handler(commands=["app"])
+def send_webapp_link(message):
+    chat_id = message.chat.id
+    try:
+        bot.delete_message(chat_id, message.message_id)
+    except Exception:
+        pass
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(
+        "📊 Открыть Прораб-ERP",
+        web_app=types.WebAppInfo(url="https://prorab-bot-fmnz.onrender.com/app")
+    ))
+    bot.send_message(chat_id, "📱 Нажми кнопку чтобы открыть веб-интерфейс:", reply_markup=markup)
+
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     log.info("Инициализация базы данных...")
