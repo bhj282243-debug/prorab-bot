@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Прораб-ERP</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F4F0; color: #1A1A18; min-height: 100vh; }
+  :root {
+    --bg: #F5F4F0; --surface: #fff; --border: #E2DFD8;
+    --ink: #1A1A18; --muted: #8A8880;
+    --accent: #D4500A; --accent-bg: #FDF1EB;
+    --green: #1A7A4A; --green-bg: #EBF7F1;
+    --red: #C0392B; --red-bg: #FDECEA;
+    --purple: #6C3483; --purple-bg: #F4ECF7;
+  }
+  .screen { display: none; flex-direction: column; min-height: 100vh; }
+  .screen.active { display: flex; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .back-btn { background: none; border: none; color: var(--accent); font-size: 22px; cursor: pointer; padding: 0; }
+  .topbar h1 { font-size: 17px; font-weight: 800; color: var(--ink); }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-red { background: var(--red-bg); color: var(--red); }
+  .content { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); padding: 16px; }
+  .card-title { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .metric-label { color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px; }
+  .metric-value { font-weight: 800; font-size: 13px; line-height: 1.2; }
+  .progress-wrap { margin-top: 14px; }
+  .progress-bar-bg { background: var(--border); border-radius: 6px; height: 10px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; border-radius: 6px; transition: width 0.5s; }
+  .progress-labels { display: flex; justify-content: space-between; margin-top: 4px; }
+  .progress-labels span { color: var(--muted); font-size: 11px; }
+  .profit-block { background: var(--purple-bg); border-radius: 14px; padding: 14px 16px; border: 1px solid rgba(108,52,131,0.2); }
+  .profit-label { color: var(--purple); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+  .profit-row { display: flex; align-items: center; gap: 8px; }
+  .profit-amount { color: var(--purple); font-weight: 900; font-size: 20px; }
+  .profit-dots { display: flex; gap: 4px; align-items: center; }
+  .profit-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--purple); opacity: 0.5; }
+  .eye-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--purple); opacity: 0.7; }
+  .cat-row { margin-bottom: 10px; }
+  .cat-row-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .cat-row-name { color: var(--ink); font-size: 13px; }
+  .cat-row-amount { color: var(--ink); font-weight: 700; font-size: 13px; }
+  .cat-bar-bg { background: var(--border); border-radius: 3px; height: 5px; }
+  .cat-bar-fill { height: 5px; border-radius: 3px; }
+  .tx-item { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .tx-item:last-child { border-bottom: none; }
+  .tx-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+  .tx-info { flex: 1; min-width: 0; }
+  .tx-name { color: var(--ink); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tx-meta { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .tx-amount { font-weight: 800; font-size: 14px; flex-shrink: 0; }
+  .project-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 10px; }
+  .project-card-body { padding: 14px 16px; cursor: pointer; }
+  .project-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .project-name { color: var(--ink); font-weight: 800; font-size: 15px; }
+  .project-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .project-stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+  .project-stat-value { font-weight: 700; font-size: 12px; }
+  .project-actions { border-top: 1px solid var(--border); display: flex; background: var(--bg); }
+  .project-action-btn { flex: 1; padding: 10px; background: none; border: none; font-weight: 600; font-size: 12px; cursor: pointer; }
+  .bottom-nav { display: flex; border-top: 1px solid var(--border); background: var(--surface); position: sticky; bottom: 0; z-index: 20; }
+  .nav-btn { flex: 1; padding: 12px 0 10px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .nav-icon { font-size: 20px; }
+  .nav-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .nav-btn.active .nav-label { color: var(--accent); }
+  .nav-indicator { width: 20px; height: 2px; background: var(--accent); border-radius: 1px; }
+  .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; }
+  .btn-accent { background: var(--accent); color: #fff; }
+  .btn-outline { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .tab { flex: 1; padding: 9px; border-radius: 10px; cursor: pointer; border: none; font-weight: 700; font-size: 13px; }
+  .tab.active { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(212,80,10,0.3); }
+  .tab.inactive { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+  .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 4px; }
+  .filter-btn { padding: 6px 13px; border-radius: 20px; white-space: nowrap; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; }
+  .filter-btn.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 14px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: flex-end; }
+  .modal { background: var(--surface); width: 100%; border-radius: 20px 20px 0 0; padding: 24px 20px; max-height: 80vh; overflow-y: auto; }
+  .modal h2 { font-size: 17px; font-weight: 800; margin-bottom: 16px; text-align: center; }
+  .modal-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
+  .delete-word { background: var(--red-bg); border: 1px solid rgba(192,57,43,0.3); border-radius: 10px; padding: 10px; text-align: center; margin-bottom: 12px; }
+  .delete-word span { color: var(--red); font-weight: 900; font-size: 18px; letter-spacing: 3px; }
+  .delete-input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid var(--border); font-size: 15px; text-align: center; font-weight: 700; outline: none; margin-bottom: 12px; }
+  .delete-input.valid { border-color: var(--red); }
+  .hidden { display: none !important; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="screen active" id="screen-projects">
+  <div class="topbar">
+    <div class="topbar-left"><h1>Мои объекты</h1></div>
+    <button class="btn-accent" style="padding:6px 14px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;" onclick="showNewProject()">+ Новый</button>
+  </div>
+  <div class="content">
+    <div class="tabs">
+      <button class="tab active" id="tab-active" onclick="switchTab('active')">Активные</button>
+      <button class="tab inactive" id="tab-archived" onclick="switchTab('archived')">Архив</button>
+    </div>
+    <div id="projects-list"><div class="loading">Загрузка...</div></div>
+  </div>
+</div>
+
+<div class="screen" id="screen-dashboard">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="goBack()">←</button>
+      <h1 id="dash-title">Объект</h1>
+    </div>
+    <span class="badge" id="dash-status-badge"></span>
+  </div>
+  <div class="content" id="dash-content">
+    <div class="loading">Загрузка...</div>
+  </div>
+  <div class="bottom-nav">
+    <button class="nav-btn active" onclick="showDashboard()">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Объект</span>
+      <div class="nav-indicator"></div>
+    </button>
+    <button class="nav-btn" onclick="showScreen('screen-list'); loadTransactions()">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Список</span>
+    </button>
+  </div>
+</div>
+
+<div class="screen" id="screen-list">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showDashboard()">←</button>
+      <h1>Все записи</h1>
+    </div>
+    <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;">📄 Отчёт</button>
+  </div>
+  <div class="content">
+    <div class="filters" id="tx-filters">
+      <button class="filter-btn active" onclick="filterTx('all', this)">Все</button>
+      <button class="filter-btn" onclick="filterTx('material', this)">🧱 Материалы</button>
+      <button class="filter-btn" onclick="filterTx('worker', this)">👷 Рабочие</button>
+      <button class="filter-btn" onclick="filterTx('road', this)">🚗 Логистика</button>
+      <button class="filter-btn" onclick="filterTx('unexpected', this)">⚠️ Непредвид.</button>
+      <button class="filter-btn" onclick="filterTx('client', this)">💰 От клиента</button>
+    </div>
+    <div id="tx-list"><div class="loading">Загрузка...</div></div>
+  </div>
+  <div class="bottom-nav">
+    <button class="nav-btn" onclick="showDashboard()">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Объект</span>
+    </button>
+    <button class="nav-btn active" onclick="showScreen('screen-list')">
+      <span class="nav-icon">📋</span>
+      <span class="nav-label">Список</span>
+      <div class="nav-indicator"></div>
+    </button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="modal-delete">
+  <div class="modal">
+    <div style="font-size:28px;text-align:center;margin-bottom:8px;">⚠️</div>
+    <h2>Удалить объект?</h2>
+    <p style="color:var(--muted);font-size:13px;text-align:center;margin-bottom:16px;line-height:1.6;">Все записи будут удалены навсегда.<br>Для подтверждения напиши слово:</p>
+    <div class="delete-word"><span>УДАЛИТЬ</span></div>
+    <input class="delete-input" id="delete-input" placeholder="Введи УДАЛИТЬ" oninput="checkDeleteInput()" />
+    <button class="modal-btn" id="delete-confirm-btn" style="background:var(--border);color:var(--muted);" disabled onclick="confirmDelete()">Удалить навсегда</button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-delete')">Отмена</button>
+  </div>
+</div>
+
+<script>
+const API = 'https://prorab-bot-fmnz.onrender.com';
+let USER_ID = 0;
+let currentProject = null;
+let allTransactions = [];
+let currentTab = 'active';
+let deleteProjectName = '';
+
+const CAT = {
+  material:   { label: 'Материалы',      emoji: '🧱', color: '#D4500A' },
+  worker:     { label: 'Рабочие',        emoji: '👷', color: '#2980B9' },
+  road:       { label: 'Логистика',      emoji: '🚗', color: '#8E44AD' },
+  unexpected: { label: 'Непредвиденные', emoji: '⚠️', color: '#E67E22' },
+  client:     { label: 'От клиента',     emoji: '💰', color: '#1A7A4A' },
+  profit:     { label: 'Моя прибыль',    emoji: '🏦', color: '#6C3483' },
+};
+
+function fmt(n) {
+  return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' сум';
+}
+
+window.addEventListener('load', () => {
+  if (window.Telegram?.WebApp) {
+    Telegram.WebApp.ready();
+    Telegram.WebApp.expand();
+    USER_ID = Telegram.WebApp.initDataUnsafe?.user?.id || 0;
+  }
+  if (!USER_ID) USER_ID = 123456;
+  loadProjects();
+});
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function goBack() {
+  showScreen('screen-projects');
+  currentProject = null;
+  loadProjects();
+}
+
+function showDashboard() {
+  showScreen('screen-dashboard');
+  loadDashboard();
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+}
+
+async function loadProjects() {
+  const list = document.getElementById('projects-list');
+  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const endpoint = currentTab === 'active'
+      ? `${API}/api/projects?user_id=${USER_ID}`
+      : `${API}/api/projects/archived?user_id=${USER_ID}`;
+    const res = await fetch(endpoint);
+    const projects = await res.json();
+    renderProjects(projects);
+  } catch(e) {
+    list.innerHTML = '<div class="empty">⚠️ Ошибка загрузки. Проверь подключение.</div>';
+  }
+}
+
+async function renderProjects(projects) {
+  const list = document.getElementById('projects-list');
+  if (!projects.length) {
+    list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Нет активных объектов' : 'Архив пуст'}</div>`;
+    return;
+  }
+  let html = '';
+  for (const p of projects) {
+    let summary = { total_spent: 0, total_client: 0, balance: 0 };
+    try {
+      const r = await fetch(`${API}/api/projects/${encodeURIComponent(p.name)}/summary?user_id=${USER_ID}`);
+      summary = await r.json();
+    } catch(e) {}
+    const pct = summary.total_spent > 0 ? Math.min(Math.round(summary.total_spent / (summary.total_spent + Math.max(summary.balance, 0)) * 100), 100) : 0;
+    const over = summary.balance < 0;
+    html += `
+    <div class="project-card">
+      <div class="project-card-body" onclick="openProject('${p.name.replace(/'/g, "\\'")}')">
+        <div class="project-card-header">
+          <div class="project-name">${p.name}</div>
+          <span class="badge ${over ? 'badge-red' : 'badge-green'}">${over ? '🟥 Перерасход' : '🟩 В бюджете'}</span>
+        </div>
+        <div class="project-stats">
+          <div><div class="project-stat-label">Потрачено</div><div class="project-stat-value">${fmt(summary.total_spent)}</div></div>
+          <div><div class="project-stat-label">От клиента</div><div class="project-stat-value" style="color:var(--green)">${fmt(summary.total_client)}</div></div>
+          <div><div class="project-stat-label">Прибыль</div><div class="project-stat-value" style="color:${summary.balance >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(summary.balance))}</div></div>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%;background:${over ? 'var(--red)' : 'var(--accent)'}"></div></div>
+        <div style="color:var(--muted);font-size:11px;margin-top:4px;">${pct}% использовано</div>
+      </div>
+      <div class="project-actions">
+        ${currentTab === 'active'
+          ? `<button class="project-action-btn" style="color:var(--muted)" onclick="archiveProject('${p.name.replace(/'/g, "\\'")}')">📦 В архив</button>`
+          : `<button class="project-action-btn" style="color:var(--green);border-right:1px solid var(--border)" onclick="restoreProject('${p.name.replace(/'/g, "\\'")}')">↩️ Восстановить</button>
+             <button class="project-action-btn" style="color:var(--red)" onclick="showDeleteModal('${p.name.replace(/'/g, "\\'")}')">🗑 Удалить</button>`
+        }
+      </div>
+    </div>`;
+  }
+  list.innerHTML = html;
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-active').className = tab === 'active' ? 'tab active' : 'tab inactive';
+  document.getElementById('tab-archived').className = tab === 'archived' ? 'tab active' : 'tab inactive';
+  loadProjects();
+}
+
+function openProject(name) {
+  currentProject = name;
+  document.getElementById('dash-title').textContent = name;
+  showScreen('screen-dashboard');
+  loadDashboard();
+}
+
+async function loadDashboard() {
+  const content = document.getElementById('dash-content');
+  content.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const res = await fetch(`${API}/api/projects/${encodeURIComponent(currentProject)}/summary?user_id=${USER_ID}`);
+    const s = await res.json();
+    const over = s.balance < 0;
+    const badge = document.getElementById('dash-status-badge');
+    badge.textContent = over ? '🟥 Перерасход' : '🟩 В бюджете';
+    badge.className = `badge ${over ? 'badge-red' : 'badge-green'}`;
+    const spent = s.total_spent;
+    const received = s.total_client;
+    const profit = s.balance;
+    const pct = spent > 0 ? Math.min(Math.round(spent / (spent + Math.max(profit, 1)) * 100), 100) : 0;
+    const barColor = over ? 'var(--red)' : pct > 80 ? '#B8860B' : 'var(--accent)';
+    let catsHtml = '';
+    for (const [cat, amount] of Object.entries(s.categories || {})) {
+      const info = CAT[cat] || { emoji: '📌', label: cat, color: '#888' };
+      const barPct = spent > 0 ? Math.round(amount / spent * 100) : 0;
+      catsHtml += `<div class="cat-row"><div class="cat-row-header"><span class="cat-row-name">${info.emoji} ${info.label}</span><span class="cat-row-amount">${fmt(amount)}</span></div><div class="cat-bar-bg"><div class="cat-bar-fill" style="width:${barPct}%;background:${info.color}"></div></div></div>`;
+    }
+    const txRes = await fetch(`${API}/api/transactions?user_id=${USER_ID}&project_name=${encodeURIComponent(currentProject)}`);
+    const txs = await txRes.json();
+    allTransactions = txs;
+    let recentHtml = '';
+    for (const t of txs.slice(0, 4)) {
+      const info = CAT[t.category] || { emoji: '📌', label: t.category, color: '#888' };
+      const isIncome = t.category === 'client';
+      recentHtml += `<div class="tx-item"><div class="tx-icon" style="background:${info.color}18">${info.emoji}</div><div class="tx-info"><div class="tx-name">${t.item_name || t.target_name || '—'}</div><div class="tx-meta">${t.date} · ${info.label}</div></div><div class="tx-amount" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</div></div>`;
+    }
+    content.innerHTML = `
+      <div class="card">
+        <div class="grid-3">
+          <div class="metric"><div class="metric-label">Потрачено</div><div class="metric-value">${fmt(spent)}</div></div>
+          <div class="metric"><div class="metric-label">От клиента</div><div class="metric-value" style="color:var(--green)">${fmt(received)}</div></div>
+          <div class="metric"><div class="metric-label">Баланс</div><div class="metric-value" style="color:${profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(profit))}</div></div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="progress-labels"><span>0%</span><span style="font-weight:600">${pct}%</span><span>100%</span></div>
+        </div>
+      </div>
+      <div style="background:${profit >= 0 ? 'var(--green-bg)' : 'var(--red-bg)'};border-radius:14px;padding:14px 16px;border:1px solid ${profit >= 0 ? 'rgba(26,122,74,0.2)' : 'rgba(192,57,43,0.2)'}">
+        <div style="color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">📊 Прибыль объекта</div>
+        <div class="grid-3">
+          <div><div style="color:var(--muted);font-size:10px;">ПОЛУЧЕНО</div><div style="color:var(--green);font-weight:800;font-size:13px;">+${fmt(received)}</div></div>
+          <div><div style="color:var(--muted);font-size:10px;">РАСХОДЫ</div><div style="color:var(--red);font-weight:800;font-size:13px;">−${fmt(spent)}</div></div>
+          <div><div style="color:var(--muted);font-size:10px;">ИТОГО</div><div style="color:${profit >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:900;font-size:15px;">${profit >= 0 ? '+' : '−'}${fmt(Math.abs(profit))}</div></div>
+        </div>
+      </div>
+      <div class="profit-block">
+        <div class="profit-label">🏦 Моя прибыль</div>
+        <div class="profit-row">
+          <div id="profit-display"><div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div></div>
+          <button class="eye-btn" onclick="toggleProfit(${s.my_profit || 0})">👁</button>
+        </div>
+      </div>
+      ${catsHtml ? `<div class="card"><div class="card-title">Расходы по категориям</div>${catsHtml}</div>` : ''}
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+          <div class="card-title" style="margin:0">Последние записи</div>
+          <button style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer" onclick="showScreen('screen-list');loadTransactions()">Все →</button>
+        </div>
+        ${recentHtml || '<div class="empty">Нет записей</div>'}
+      </div>
+      <div class="grid-2">
+        <button class="btn btn-accent" onclick="alert('Ввод расходов — в Telegram боте')">+ Добавить</button>
+        <button class="btn btn-outline" onclick="alert('Отчёт — в разработке')">📄 Отчёт</button>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки данных</div>';
+  }
+}
+
+let profitVisible = false;
+function toggleProfit(amount) {
+  profitVisible = !profitVisible;
+  const el = document.getElementById('profit-display');
+  if (profitVisible) {
+    el.innerHTML = `<div class="profit-amount">${fmt(amount)}</div>`;
+  } else {
+    el.innerHTML = `<div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div>`;
+  }
+}
+
+async function loadTransactions() {
+  const list = document.getElementById('tx-list');
+  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  try {
+    const res = await fetch(`${API}/api/transactions?user_id=${USER_ID}&project_name=${encodeURIComponent(currentProject)}`);
+    allTransactions = await res.json();
+    renderTransactions(allTransactions);
+  } catch(e) {
+    list.innerHTML = '<div class="empty">⚠️ Ошибка загрузки</div>';
+  }
+}
+
+function renderTransactions(txs) {
+  const list = document.getElementById('tx-list');
+  if (!txs.length) { list.innerHTML = '<div class="empty">Нет записей</div>'; return; }
+  let html = '<div class="card">';
+  for (const t of txs) {
+    const info = CAT[t.category] || { emoji: '📌', label: t.category, color: '#888' };
+    const isIncome = t.category === 'client';
+    const name = t.target_name || t.item_name || '—';
+    html += `<div class="tx-item"><div class="tx-icon" style="background:${info.color}18">${info.emoji}</div><div class="tx-info"><div class="tx-name">${name}</div><div class="tx-meta">${t.date} · ${info.label}</div></div><div class="tx-amount" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</div></div>`;
+  }
+  html += '</div>';
+  list.innerHTML = html;
+}
+
+function filterTx(cat, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const filtered = cat === 'all' ? allTransactions : allTransactions.filter(t => t.category === cat);
+  renderTransactions(filtered);
+}
+
+async function archiveProject(name) {
+  await fetch(`${API}/api/projects/archive`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: name }) });
+  loadProjects();
+}
+
+async function restoreProject(name) {
+  await fetch(`${API}/api/projects/restore`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: name }) });
+  loadProjects();
+}
+
+function showDeleteModal(name) {
+  deleteProjectName = name;
+  document.getElementById('delete-input').value = '';
+  document.getElementById('delete-confirm-btn').disabled = true;
+  document.getElementById('delete-confirm-btn').style.background = 'var(--border)';
+  document.getElementById('delete-confirm-btn').style.color = 'var(--muted)';
+  document.getElementById('modal-delete').classList.remove('hidden');
+}
+
+function checkDeleteInput() {
+  const val = document.getElementById('delete-input').value.toUpperCase();
+  document.getElementById('delete-input').value = val;
+  const btn = document.getElementById('delete-confirm-btn');
+  if (val === 'УДАЛИТЬ') {
+    btn.disabled = false; btn.style.background = 'var(--red)'; btn.style.color = '#fff';
+    document.getElementById('delete-input').classList.add('valid');
+  } else {
+    btn.disabled = true; btn.style.background = 'var(--border)'; btn.style.color = 'var(--muted)';
+    document.getElementById('delete-input').classList.remove('valid');
+  }
+}
+
+async function confirmDelete() {
+  await fetch(`${API}/api/projects/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: deleteProjectName }) });
+  closeModal('modal-delete');
+  loadProjects();
+}
+
+function showNewProject() {
+  alert('Создание объектов — через Telegram бот командой /start');
+}
+</script>
+</body>
+</html>
