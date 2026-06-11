@@ -39,7 +39,6 @@ def get_conn():
 def put_conn(conn):
     db_pool.putconn(conn)
 
-# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ БЕЗОПАСНОСТИ ДАТ ---
 def format_db_date(date_val) -> str:
     if isinstance(date_val, datetime):
         return date_val.strftime("%d.%m")
@@ -50,23 +49,6 @@ def format_db_date(date_val) -> str:
             return date_val[:5]
     return "--.--"
 
-# --- HEALTH-CHECK СЕРВЕР ---
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain")
-        self.end_headers()
-        self.wfile.write(b"OK")
-    def log_message(self, *args):
-        pass
-
-def run_health_check_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
-    log.info(f"Health check server on port {port}")
-    server.serve_forever()
-
-# --- ИНИЦИАЛИЗАЦИЯ БД И МИГРАЦИЯ ---
 def init_db():
     conn = get_conn()
     try:
@@ -126,7 +108,6 @@ def init_db():
     finally:
         put_conn(conn)
 
-# --- СОСТОЯНИЯ ПОЛЬЗОВАТЕЛЕЙ ---
 def get_state(chat_id: int) -> dict:
     conn = get_conn()
     try:
@@ -134,18 +115,9 @@ def get_state(chat_id: int) -> dict:
         cur.execute("SELECT project, category, action, is_archived, last_msg_id FROM user_states WHERE user_id = %s", (chat_id,))
         row = cur.fetchone()
         if row:
-            return {
-                'project': row[0],
-                'category': row[1],
-                'action': row[2],
-                'is_archived': row[3] or False,
-                'last_msg_id': row[4]
-            }
+            return {'project': row[0], 'category': row[1], 'action': row[2], 'is_archived': row[3] or False, 'last_msg_id': row[4]}
         else:
-            cur.execute(
-                "INSERT INTO user_states (user_id, project, category, action, is_archived, last_msg_id) "
-                "VALUES (%s, NULL, NULL, NULL, FALSE, NULL)", (chat_id,)
-            )
+            cur.execute("INSERT INTO user_states (user_id, project, category, action, is_archived, last_msg_id) VALUES (%s, NULL, NULL, NULL, FALSE, NULL)", (chat_id,))
             conn.commit()
             return {'project': None, 'category': None, 'action': None, 'is_archived': False, 'last_msg_id': None}
     except Exception as e:
@@ -167,14 +139,7 @@ def save_state(chat_id: int, state: dict):
                 action = EXCLUDED.action,
                 is_archived = EXCLUDED.is_archived,
                 last_msg_id = EXCLUDED.last_msg_id
-        ''', (
-            chat_id,
-            state.get('project'),
-            state.get('category'),
-            state.get('action'),
-            state.get('is_archived', False),
-            state.get('last_msg_id')
-        ))
+        ''', (chat_id, state.get('project'), state.get('category'), state.get('action'), state.get('is_archived', False), state.get('last_msg_id')))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -182,7 +147,6 @@ def save_state(chat_id: int, state: dict):
     finally:
         put_conn(conn)
 
-# --- ОТПРАВКА ЕДИНСТВЕННОГО СООБЩЕНИЯ ---
 def send_single(chat_id: int, text: str, reply_markup=None, parse_mode=None) -> telebot.types.Message:
     state = get_state(chat_id)
     if state.get('last_msg_id'):
@@ -200,7 +164,6 @@ def send_single(chat_id: int, text: str, reply_markup=None, parse_mode=None) -> 
     save_state(chat_id, state)
     return msg
 
-# --- AI: ПАРСИНГ ТЕКСТА ---
 def parse_smart_text(text: str, category: str):
     prompt = f"""
 Ты — продвинутый аналитик строительных расходов в Узбекистане.
@@ -213,23 +176,19 @@ def parse_smart_text(text: str, category: str):
 Обязательно разделяй количество и единицу измерения.
 Например: "10 мешков цемента" -> item_name: "цемент", quantity: "10", unit: "мешок"
 "арматура 50кг" -> item_name: "арматура", quantity: "50", unit: "кг"
-"20 м2 кафеля" -> item_name: "кафель", quantity: "20", unit: "м2"
 Если единица измерения не указана явно, пиши unit: "шт".
 
 Верни строго чистый JSON-список объектов.
 Форматы:
 
 material: [{{"item_name":"...", "quantity":"...", "unit":"...", "unit_price": число, "amount": число}}]
-
 worker: [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
-
 road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
 
 Текст: {text}
 """
     return _call_gemini_text(prompt)
 
-# --- AI: ПАРСИНГ ГОЛОСА ---
 def parse_smart_voice(voice_bytes: bytes, category: str):
     prompt = f"""
 Ты — продвинутый аналитик строительных расходов в Узбекистане.
@@ -237,52 +196,31 @@ def parse_smart_voice(voice_bytes: bytes, category: str):
 
 ПРАВИЛО ДЛЯ ЧИСЕЛ: «пять миллионов» → 5000000, «полтора миллиона» → 1500000.
 
-СТРОИТЕЛЬНЫЕ ТЕРМИНЫ — распознавай точно (не заменяй похожими словами):
-- "гипсокартон" (не "картон", не "гипс")
-- "подвес" (не "пакет", не "подвез")
-- "профиль" (не "профи")
-- "арматура" (не "аппаратура")
-- "цемент", "кирпич", "плитка", "кафель", "шпаклёвка", "грунтовка"
-- "саморез", "дюбель", "анкер", "уголок", "швеллер"
-- "сетка", "утеплитель", "пеноблок", "газоблок"
-- "ламинат", "линолеум", "паркет"
-- "труба", "кабель", "провод", "розетка", "выключатель"
-Если слово похоже на строительный термин — используй строительный термин.
+СТРОИТЕЛЬНЫЕ ТЕРМИНЫ — распознавай точно:
+- "гипсокартон", "подвес", "профиль", "арматура", "цемент", "кирпич", "плитка"
+- "саморез", "дюбель", "анкер", "уголок", "швеллер", "сетка", "утеплитель"
 
 ПРАВИЛО ДЛЯ ЕДИНИЦ ИЗМЕРЕНИЯ (только для категории material):
 Разделяй количество и единицу измерения.
-Например: "десять метров профиля" -> item_name: "профиль", quantity: "10", unit: "м"
-"цемент пять мешков" -> item_name: "цемент", quantity: "5", unit: "мешок"
-Если единица измерения не указана, используй "шт".
 
 Верни строго чистый JSON-список объектов.
 Форматы:
 
 material: [{{"item_name":"...", "quantity":"...", "unit":"...", "unit_price": число, "amount": число}}]
-
 worker: [{{"item_name":"За что (или 'Аванс')", "target_name":"Имя", "amount": число}}]
-
 road/unexpected/client: [{{"item_name":"Описание", "amount": число}}]
 """
     audio_b64 = base64.b64encode(voice_bytes).decode('utf-8')
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={AI_API_KEY}"
     payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inlineData": {"mimeType": "audio/ogg", "data": audio_b64}}
-            ]
-        }],
+        "contents": [{"parts": [{"text": prompt}, {"inlineData": {"mimeType": "audio/ogg", "data": audio_b64}}]}],
         "generationConfig": {"responseMimeType": "application/json"}
     }
     return _call_gemini_raw(url, payload)
 
 def _call_gemini_text(prompt: str):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key={AI_API_KEY}"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json"}
-    }
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json"}}
     return _call_gemini_raw(url, payload)
 
 def _call_gemini_raw(url: str, payload: dict):
@@ -291,11 +229,9 @@ def _call_gemini_raw(url: str, payload: dict):
         resp.raise_for_status()
         resp_json = resp.json()
         if 'candidates' not in resp_json or not resp_json['candidates']:
-            log.error(f"Gemini вернул пустой список кандидатов: {resp_json}")
             return None
         candidate = resp_json['candidates'][0]
         if 'content' not in candidate or 'parts' not in candidate['content'] or not candidate['content']['parts']:
-            log.error(f"Некорректный формат контента у Gemini: {resp_json}")
             return None
         raw = candidate['content']['parts'][0].get('text', '').strip()
         raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -307,7 +243,6 @@ def _call_gemini_raw(url: str, payload: dict):
         log.error(f"Gemini parse error: {e}")
     return None
 
-# --- БД: СОХРАНЕНИЕ ЗАПИСЕЙ ---
 def save_entries_to_db(chat_id: int, project: str, category: str, entries: list):
     conn = get_conn()
     try:
@@ -317,7 +252,6 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
             try:
                 amount = float(e.get('amount', 0) or 0)
             except (ValueError, TypeError):
-                log.warning(f"Некорректный amount от Gemini: {e.get('amount')!r} — запись пропущена.")
                 continue
             if amount <= 0:
                 continue
@@ -325,15 +259,11 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
                 INSERT INTO transactions (user_id, project_name, category, item_name, quantity, unit, unit_price, amount, target_name)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''', (
-                chat_id,
-                project,
-                category,
-                e.get('item_name', '—'),
-                e.get('quantity'),
+                chat_id, project, category,
+                e.get('item_name', '—'), e.get('quantity'),
                 e.get('unit', 'шт') if category == 'material' else None,
                 (lambda v: float(v) if v not in (None, '', 'null') else None)(e.get('unit_price')),
-                amount,
-                e.get('target_name')
+                amount, e.get('target_name')
             ))
             saved += 1
         conn.commit()
@@ -345,11 +275,9 @@ def save_entries_to_db(chat_id: int, project: str, category: str, entries: list)
     finally:
         put_conn(conn)
 
-# --- ДИНАМИЧЕСКИЙ ЭКРАН КАТЕГОРИИ С ИНЛАЙН-КНОПКАМИ ---
 def show_category_page(chat_id: int, project: str, category: str, prefix_text: str = ""):
     conn = get_conn()
     inline_markup = types.InlineKeyboardMarkup(row_width=2)
-
     prompts = {
         "material": "✌️ Жду закупку материалов (текст или голос):",
         "worker": "✌️ Жду аванс рабочего (текст или голос):",
@@ -408,12 +336,9 @@ def show_category_page(chat_id: int, project: str, category: str, prefix_text: s
     if prefix_text:
         full_text += prefix_text + "\n\n"
     full_text += res + "——————————————————\n" + prompts.get(category, "")
-
-    # Добавляем кнопку Назад в инлайн-клавиатуру последней строкой
     inline_markup.add(types.InlineKeyboardButton("⬅️ Назад в меню объекта", callback_data="go_back_project"))
     bot.send_message(chat_id, full_text, reply_markup=inline_markup, parse_mode="Markdown")
 
-# --- КЛАВИАТУРЫ ПОД ЭКРАНОМ (REPLY) ---
 def get_main_keyboard(chat_id: int):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     conn = get_conn()
@@ -460,7 +385,6 @@ def get_inside_category_keyboard():
     markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
     return markup
 
-# --- ДАШБОРД ОБЪЕКТА ---
 def handle_project_menu_display(chat_id: int, state: dict):
     project = state['project']
     conn = get_conn()
@@ -492,14 +416,12 @@ def handle_project_menu_display(chat_id: int, state: dict):
     )
     send_single(chat_id, text, reply_markup=get_project_keyboard(is_archived=state.get('is_archived', False)), parse_mode="Markdown")
 
-# --- ОБРАБОТКА ТЕКСТОВОЙ ЗАПИСИ ---
 def process_construction_entry(message, project: str, category: str):
     chat_id = message.chat.id
     try:
         bot.delete_message(chat_id, message.message_id)
     except Exception:
         pass
-
     entries = parse_smart_text(message.text, category)
     if not entries:
         send_single(chat_id, "⚠️ Не удалось распознать. Напиши чётче (название + сумма).", reply_markup=get_inside_category_keyboard())
@@ -521,14 +443,12 @@ def process_construction_entry(message, project: str, category: str):
             lines.append(f"• {e.get('item_name','—')}: {amount:,.0f} сум")
     show_category_page(chat_id, project, category, prefix_text="\n".join(lines))
 
-# --- ОБРАБОТКА ГОЛОСОВОЙ ЗАПИСИ ---
 def process_voice_entry(message, project: str, category: str):
     chat_id = message.chat.id
     try:
         bot.delete_message(chat_id, message.message_id)
     except Exception:
         pass
-
     try:
         file_info = bot.get_file(message.voice.file_id)
         voice_bytes = bot.download_file(file_info.file_path)
@@ -536,14 +456,13 @@ def process_voice_entry(message, project: str, category: str):
         log.error(f"Ошибка скачивания голоса: {e}")
         send_single(chat_id, "⚠️ Не удалось получить голосовое сообщение.", reply_markup=get_inside_category_keyboard())
         return
-
     entries = parse_smart_voice(voice_bytes, category)
     if not entries:
-        send_single(chat_id, "⚠️ Не удалось распознать голос. Попробуй говорить чётче или напиши текстом.", reply_markup=get_inside_category_keyboard())
+        send_single(chat_id, "⚠️ Не удалось распознать голос.", reply_markup=get_inside_category_keyboard())
         return
     saved = save_entries_to_db(chat_id, project, category, entries)
     if saved == 0:
-        send_single(chat_id, "⚠️ Записи не сохранены — проверь суммы (должны быть > 0).", reply_markup=get_inside_category_keyboard())
+        send_single(chat_id, "⚠️ Записи не сохранены.", reply_markup=get_inside_category_keyboard())
         return
     lines = [f"✅ Сохранено {saved} записей (голос):\n"]
     for e in entries:
@@ -558,7 +477,6 @@ def process_voice_entry(message, project: str, category: str):
             lines.append(f"• {e.get('item_name','—')}: {amount:,.0f} сум")
     show_category_page(chat_id, project, category, prefix_text="\n".join(lines))
 
-# --- ГЕНЕРАЦИЯ ПОЛНОГО ОТЧЁТА ---
 def generate_pro_report(chat_id: int, project: str, is_archived: bool = False):
     conn = get_conn()
     try:
@@ -580,11 +498,8 @@ def generate_pro_report(chat_id: int, project: str, is_archived: bool = False):
         return
 
     cat_labels = {
-        'material': '🧱 Материалы',
-        'worker': '👷 Авансы рабочих',
-        'road': '🚗 Дорожные расходы',
-        'unexpected': '⚠️ Непредвиденные',
-        'client': '💰 Оплата от клиента'
+        'material': '🧱 Материалы', 'worker': '👷 Авансы рабочих',
+        'road': '🚗 Дорожные расходы', 'unexpected': '⚠️ Непредвиденные', 'client': '💰 Оплата от клиента'
     }
     cats = {}
     for r in rows:
@@ -629,7 +544,6 @@ def generate_pro_report(chat_id: int, project: str, is_archived: bool = False):
     ]
     send_single(chat_id, "\n".join(lines), reply_markup=get_project_keyboard(is_archived), parse_mode="Markdown")
 
-# --- ОБРАБОТЧИК /start ---
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
@@ -641,13 +555,11 @@ def send_welcome(message):
     save_state(chat_id, state)
     send_single(chat_id, "🏗️ Прораб-ERP запущена!\nВыбери объект:", reply_markup=get_main_keyboard(chat_id), parse_mode="Markdown")
 
-# --- ОБРАБОТЧИК ИНЛАЙН-КНОПОК ---
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callback(call):
     chat_id = call.message.chat.id
     data = call.data
     state = get_state(chat_id)
-
     try:
         bot.answer_callback_query(call.id)
     except Exception:
@@ -686,21 +598,17 @@ def handle_callback(call):
         field = parts[2]
         state['action'] = f"waiting_for_edit_{t_id}_{field}"
         save_state(chat_id, state)
-        if field == "item":
-            hint = "📝 Введи новое название:"
-        else:
-            hint = "💰 Введи новую сумму (например: 1500000):"
+        hint = "📝 Введи новое название:" if field == "item" else "💰 Введи новую сумму:"
         back_markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
         back_markup.add(types.KeyboardButton("⬅️ Назад в меню объекта"))
         bot.send_message(chat_id, hint, reply_markup=back_markup)
 
-    elif data == "cancel_edit" or data == "go_back_project":
+    elif data in ("cancel_edit", "go_back_project"):
         state['category'] = None
         state['action'] = None
         save_state(chat_id, state)
         handle_project_menu_display(chat_id, state)
 
-# --- КНОПКИ НАВИГАЦИИ ---
 NAV_BUTTONS = {
     "🗄️ АРХИВ ЗАВЕРШЁННЫХ ОБЪЕКТОВ", "➕ Добавить новый объект", "📦 СДАТЬ ОБЪЕКТ В АРХИВ",
     "🚀 📊 ОТЧЁТ ДЛЯ КЛИЕНТА", "🧱 Материалы", "👷 Авансы рабочих", "🚗 Дорожные расходы",
@@ -713,13 +621,11 @@ CATEGORIES_MAP = {
     "⚠️ Непредвиденные": "unexpected", "💰 Оплата от клиента": "client"
 }
 
-# --- МОДУЛЬ ИЗМЕНЕНИЯ ПОЛЕЙ ЗАПИСИ ---
 def handle_edit_action(chat_id: int, text: str, state: dict, action: str):
     parts = action.split("_")
     t_id = int(parts[3])
     field = parts[4]
     new_val = text.strip()
-
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -729,18 +635,6 @@ def handle_edit_action(chat_id: int, text: str, state: dict, action: str):
             cat, old_qty, old_unit, old_price, old_amount = row
             if field == "item":
                 cur.execute("UPDATE transactions SET item_name = %s WHERE id = %s AND user_id = %s", (new_val, t_id, chat_id))
-            elif field == "qty":
-                sub_parts = new_val.split(" ", 1)
-                parsed_qty = sub_parts[0]
-                parsed_unit = sub_parts[1] if len(sub_parts) > 1 else old_unit
-                cur.execute("UPDATE transactions SET quantity = %s, unit = %s WHERE id = %s AND user_id = %s", (parsed_qty, parsed_unit, t_id, chat_id))
-                if cat == 'material' and old_price:
-                    try:
-                        q = float(parsed_qty)
-                        new_amount = q * float(old_price)
-                        cur.execute("UPDATE transactions SET amount = %s WHERE id = %s AND user_id = %s", (new_amount, t_id, chat_id))
-                    except ValueError:
-                        pass
             elif field == "amount":
                 if "." in new_val and len(new_val.split(".")[1]) == 3:
                     try:
@@ -748,31 +642,18 @@ def handle_edit_action(chat_id: int, text: str, state: dict, action: str):
                     except ValueError:
                         amount_val = float(new_val.replace(" ", ""))
                 else:
-                    try:
-                        amount_val = float(new_val.replace(" ", ""))
-                    except ValueError:
-                        amount_val = float(new_val)
+                    amount_val = float(new_val.replace(" ", ""))
                 cur.execute("UPDATE transactions SET amount = %s WHERE id = %s AND user_id = %s", (amount_val, t_id, chat_id))
-                if cat == 'material' and old_qty:
-                    try:
-                        q = float(old_qty)
-                        if q > 0:
-                            new_price = amount_val / q
-                            cur.execute("UPDATE transactions SET unit_price = %s WHERE id = %s AND user_id = %s", (new_price, t_id, chat_id))
-                    except ValueError:
-                        pass
             conn.commit()
             state['action'] = None
             save_state(chat_id, state)
             show_category_page(chat_id, state['project'], cat, prefix_text="✅ Запись успешно обновлена!")
-            return
     except Exception as e:
         log.error(f"Error updating field: {e}")
-        send_single(chat_id, "⚠️ Ошибка обновления данных. Проверь формат цифр и попробуй снова.")
+        send_single(chat_id, "⚠️ Ошибка обновления данных.")
     finally:
         put_conn(conn)
 
-# --- МОДУЛЬ НАВИГАЦИИ ПО МЕНЮ И СОЗДАНИЯ ОБЪЕКТОВ ---
 def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
     if text == "⬅️ Назад в меню объекта":
         state['category'] = None
@@ -806,22 +687,21 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
     if state.get('action') == 'waiting_for_project_name':
         project_name = text.strip()
         if not project_name:
-            send_single(chat_id, "⚠️ Название не может быть пустым. Попробуй ещё раз:")
+            send_single(chat_id, "⚠️ Название не может быть пустым.")
             return
         conn = get_conn()
         try:
             cur = conn.cursor()
-            # Проверяем только активные объекты с таким именем
             cur.execute("SELECT id FROM projects WHERE user_id = %s AND name = %s AND status = 'active'", (chat_id, project_name))
             if cur.fetchone():
-                send_single(chat_id, f"⚠️ Активный объект *{project_name}* уже существует. Выбери другое название:", parse_mode="Markdown")
+                send_single(chat_id, f"⚠️ Активный объект *{project_name}* уже существует.", parse_mode="Markdown")
                 return
             cur.execute("INSERT INTO projects (user_id, name, status) VALUES (%s, %s, 'active')", (chat_id, project_name))
             conn.commit()
         except Exception as e:
             conn.rollback()
             log.error(f"Add project error: {e}")
-            send_single(chat_id, "⚠️ Ошибка создания объекта. Попробуй снова.", reply_markup=get_main_keyboard(chat_id))
+            send_single(chat_id, "⚠️ Ошибка создания объекта.", reply_markup=get_main_keyboard(chat_id))
             return
         finally:
             put_conn(conn)
@@ -876,7 +756,6 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
         send_single(chat_id, f"🗑️ Объект *{name}* удалён навсегда.", reply_markup=get_archive_keyboard(chat_id), parse_mode="Markdown")
         return
 
-    # Выбор активного объекта
     conn = get_conn()
     try:
         cur = conn.cursor()
@@ -894,11 +773,9 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
         handle_project_menu_display(chat_id, state)
         return
 
-    # Выбор категории внутри объекта (Архив / Активный)
     if state.get('project') and text in CATEGORIES_MAP:
         cat = CATEGORIES_MAP[text]
         if state.get('is_archived'):
-            # Только просмотр для архивных объектов
             conn = get_conn()
             try:
                 cur = conn.cursor()
@@ -933,20 +810,17 @@ def handle_navigation_and_projects(chat_id: int, text: str, state: dict):
                 put_conn(conn)
             send_single(chat_id, history, reply_markup=get_project_keyboard(is_archived=True), parse_mode="Markdown")
         else:
-            # Активный объект — открываем страницу категории для ввода
             state['category'] = cat
             save_state(chat_id, state)
             show_category_page(chat_id, state['project'], cat)
         return
 
-# --- ГЛАВНЫЙ ОБРАБОТЧИК ТЕКСТОВЫХ СООБЩЕНИЙ ---
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     chat_id = message.chat.id
     text = message.text
     state = get_state(chat_id)
 
-    # Если ждём редактирование поля
     if state.get('action') and state['action'].startswith('waiting_for_edit_'):
         try:
             bot.delete_message(chat_id, message.message_id)
@@ -955,7 +829,6 @@ def handle_text(message):
         handle_edit_action(chat_id, text, state, state['action'])
         return
 
-    # Если это кнопка навигации или меню
     if text in NAV_BUTTONS or state.get('action') == 'waiting_for_project_name' or text.endswith(" (Архив)"):
         try:
             bot.delete_message(chat_id, message.message_id)
@@ -964,20 +837,16 @@ def handle_text(message):
         handle_navigation_and_projects(chat_id, text, state)
         return
 
-    # Если выбран объект и категория — это ввод данных
     if state.get('project') and state.get('category') and not state.get('is_archived'):
         process_construction_entry(message, state['project'], state['category'])
         return
 
-    # Если нажата кнопка объекта или категории
     handle_navigation_and_projects(chat_id, text, state)
 
-# --- ГЛАВНЫЙ ОБРАБОТЧИК ГОЛОСОВЫХ СООБЩЕНИЙ ---
 @bot.message_handler(content_types=['voice'])
 def handle_voice(message):
     chat_id = message.chat.id
     state = get_state(chat_id)
-
     if state.get('project') and state.get('category') and not state.get('is_archived'):
         process_voice_entry(message, state['project'], state['category'])
     else:
@@ -985,16 +854,11 @@ def handle_voice(message):
             bot.delete_message(chat_id, message.message_id)
         except Exception:
             pass
-        send_single(chat_id, "⚠️ Сначала выбери объект и категорию, потом отправляй голосовое.", reply_markup=get_main_keyboard(chat_id))
+        send_single(chat_id, "⚠️ Сначала выбери объект и категорию.", reply_markup=get_main_keyboard(chat_id))
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     log.info("Инициализация базы данных...")
     init_db()
-
-    log.info("Запуск health-check сервера...")
-    t = threading.Thread(target=run_health_check_server, daemon=True)
-    t.start()
-
     log.info("Бот запущен. Polling...")
     bot.infinity_polling(timeout=30, long_polling_timeout=20)
