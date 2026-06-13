@@ -874,9 +874,10 @@ def handle_voice(message):
         send_single(chat_id, "⚠️ Сначала выбери объект и категорию.", reply_markup=get_main_keyboard(chat_id))
 
 
+
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     log.info("Инициализация базы данных...")
     init_db()
-    log.info("Бот запущен (Render режим)")
-
+    log.info("Бот запущен. Ожидание через API...")
+    # Polling отключён — бот получает сообщения через webhook в api.py
