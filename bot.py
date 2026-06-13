@@ -882,4 +882,5 @@ if __name__ == "__main__":
 
     log.info("Бот запущен.")
 
-    bot.infinity_polling(skip_pending=True)
+    if __name__ == "__main__":
+    log.info("Бот запущен (Render режим без polling)")
