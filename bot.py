@@ -879,5 +879,7 @@ def handle_voice(message):
 if __name__ == "__main__":
     log.info("Инициализация базы данных...")
     init_db()
-    log.info("Бот запущен. Ожидание через API...")
-    # Polling отключён — бот получает сообщения через webhook в api.py
+
+    log.info("Бот запущен.")
+
+    bot.infinity_polling(skip_pending=True)
