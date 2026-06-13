@@ -255,6 +255,78 @@ def delete_project(req: ArchiveRequest):
         put_conn(conn)
 
 
+# POST /api/projects/create
+class CreateProjectRequest(BaseModel):
+    user_id: int
+    project_name: str
+
+@app.post("/api/projects/create")
+def create_project(req: CreateProjectRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO projects (user_id, name, status)
+            VALUES (%s, %s, 'active')
+            ON CONFLICT (user_id, name) DO NOTHING
+            """,
+            (req.user_id, req.project_name)
+        )
+        conn.commit()
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=409, detail="Объект с таким именем уже существует")
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/transactions/create
+class CreateTransactionRequest(BaseModel):
+    user_id: int
+    project_name: str
+    category: str
+    item_name: str
+    quantity: Optional[str] = None
+    unit: Optional[str] = None
+    unit_price: Optional[float] = None
+    amount: float
+    target_name: Optional[str] = None
+
+@app.post("/api/transactions/create")
+def create_transaction(req: CreateTransactionRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO transactions (
+                user_id, project_name, category,
+                item_name, quantity, unit,
+                unit_price, amount, target_name
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                req.user_id, req.project_name, req.category,
+                req.item_name, req.quantity, req.unit,
+                req.unit_price, req.amount, req.target_name
+            )
+        )
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
 # GET /health
 @app.get("/health")
 def health():
