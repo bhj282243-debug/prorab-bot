@@ -75,6 +75,7 @@
   .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; }
   .btn-accent { background: var(--accent); color: #fff; }
   .btn-outline { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .btn-green { background: var(--green); color: #fff; }
   .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
   .tab { flex: 1; padding: 9px; border-radius: 10px; cursor: pointer; border: none; font-weight: 700; font-size: 13px; }
   .tab.active { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(212,80,10,0.3); }
@@ -84,7 +85,7 @@
   .filter-btn.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
   .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 14px; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: flex-end; }
-  .modal { background: var(--surface); width: 100%; border-radius: 20px 20px 0 0; padding: 24px 20px; max-height: 80vh; overflow-y: auto; }
+  .modal { background: var(--surface); width: 100%; border-radius: 20px 20px 0 0; padding: 24px 20px; max-height: 90vh; overflow-y: auto; }
   .modal h2 { font-size: 17px; font-weight: 800; margin-bottom: 16px; text-align: center; }
   .modal-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
   .delete-word { background: var(--red-bg); border: 1px solid rgba(192,57,43,0.3); border-radius: 10px; padding: 10px; text-align: center; margin-bottom: 12px; }
@@ -93,14 +94,33 @@
   .delete-input.valid { border-color: var(--red); }
   .hidden { display: none !important; }
   .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
+  /* Form styles */
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px; }
+  .form-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 15px; background: var(--bg); color: var(--ink); outline: none; }
+  .form-input:focus { border-color: var(--accent); background: #fff; }
+  .form-select { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 15px; background: var(--bg); color: var(--ink); outline: none; appearance: none; }
+  .form-select:focus { border-color: var(--accent); background: #fff; }
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cat-chip { padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .cat-chip.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+  /* Report styles */
+  .report-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .report-row:last-child { border-bottom: none; }
+  .report-label { font-size: 14px; color: var(--ink); }
+  .report-value { font-size: 15px; font-weight: 800; }
+  .report-total { background: var(--accent-bg); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .report-total-label { font-size: 13px; font-weight: 700; color: var(--accent); }
+  .report-total-value { font-size: 18px; font-weight: 900; color: var(--accent); }
 </style>
 </head>
 <body>
 
+<!-- ЭКРАН: СПИСОК ОБЪЕКТОВ -->
 <div class="screen active" id="screen-projects">
   <div class="topbar">
     <div class="topbar-left"><h1>Мои объекты</h1></div>
-    <button class="btn-accent" style="padding:6px 14px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;" onclick="showNewProject()">+ Новый</button>
+    <button class="btn-accent" style="padding:6px 14px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;" onclick="showNewProjectModal()">+ Новый</button>
   </div>
   <div class="content">
     <div class="tabs">
@@ -111,6 +131,7 @@
   </div>
 </div>
 
+<!-- ЭКРАН: ДАШБОРД ОБЪЕКТА -->
 <div class="screen" id="screen-dashboard">
   <div class="topbar">
     <div class="topbar-left">
@@ -132,16 +153,21 @@
       <span class="nav-icon">📋</span>
       <span class="nav-label">Список</span>
     </button>
+    <button class="nav-btn" onclick="showReport()">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Отчёт</span>
+    </button>
   </div>
 </div>
 
+<!-- ЭКРАН: СПИСОК ТРАНЗАКЦИЙ -->
 <div class="screen" id="screen-list">
   <div class="topbar">
     <div class="topbar-left">
       <button class="back-btn" onclick="showDashboard()">←</button>
       <h1>Все записи</h1>
     </div>
-    <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;">📄 Отчёт</button>
+    <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;" onclick="showAddModal()">+ Добавить</button>
   </div>
   <div class="content">
     <div class="filters" id="tx-filters">
@@ -164,9 +190,28 @@
       <span class="nav-label">Список</span>
       <div class="nav-indicator"></div>
     </button>
+    <button class="nav-btn" onclick="showReport()">
+      <span class="nav-icon">📊</span>
+      <span class="nav-label">Отчёт</span>
+    </button>
   </div>
 </div>
 
+<!-- ЭКРАН: ОТЧЁТ -->
+<div class="screen" id="screen-report">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showDashboard()">←</button>
+      <h1>Отчёт</h1>
+    </div>
+    <span id="report-project-name" style="font-size:13px;font-weight:700;color:var(--muted)"></span>
+  </div>
+  <div class="content" id="report-content">
+    <div class="loading">Загрузка...</div>
+  </div>
+</div>
+
+<!-- МОДАЛ: УДАЛИТЬ ОБЪЕКТ -->
 <div class="modal-overlay hidden" id="modal-delete">
   <div class="modal">
     <div style="font-size:28px;text-align:center;margin-bottom:8px;">⚠️</div>
@@ -179,6 +224,53 @@
   </div>
 </div>
 
+<!-- МОДАЛ: НОВЫЙ ОБЪЕКТ -->
+<div class="modal-overlay hidden" id="modal-new-project">
+  <div class="modal">
+    <h2>Новый объект</h2>
+    <div class="form-group">
+      <label class="form-label">Название объекта</label>
+      <input class="form-input" id="new-project-name" placeholder="Например: ЖК Сити, Вилла 777" />
+    </div>
+    <button class="modal-btn btn-accent" onclick="createProject()">Создать объект</button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-new-project')">Отмена</button>
+  </div>
+</div>
+
+<!-- МОДАЛ: ДОБАВИТЬ РАСХОД/ДОХОД -->
+<div class="modal-overlay hidden" id="modal-add">
+  <div class="modal">
+    <h2>Добавить запись</h2>
+    <div class="form-group">
+      <label class="form-label">Категория</label>
+      <div class="cat-chips" id="cat-chips">
+        <div class="cat-chip" data-cat="material" onclick="selectCat(this)">🧱 Материалы</div>
+        <div class="cat-chip" data-cat="worker" onclick="selectCat(this)">👷 Рабочие</div>
+        <div class="cat-chip" data-cat="road" onclick="selectCat(this)">🚗 Логистика</div>
+        <div class="cat-chip" data-cat="unexpected" onclick="selectCat(this)">⚠️ Непредвид.</div>
+        <div class="cat-chip" data-cat="client" onclick="selectCat(this)">💰 От клиента</div>
+        <div class="cat-chip" data-cat="profit" onclick="selectCat(this)">🏦 Моя прибыль</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Название / Описание</label>
+      <input class="form-input" id="add-item-name" placeholder="Что именно?" />
+    </div>
+    <div class="grid-2" style="gap:10px;margin-bottom:14px;">
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Сумма (сум)</label>
+        <input class="form-input" id="add-amount" type="number" placeholder="0" />
+      </div>
+      <div class="form-group" style="margin:0">
+        <label class="form-label">Кому / От кого</label>
+        <input class="form-input" id="add-target" placeholder="Имя (необяз.)" />
+      </div>
+    </div>
+    <button class="modal-btn btn-accent" onclick="saveTransaction()">Сохранить</button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-add')">Отмена</button>
+  </div>
+</div>
+
 <script>
 const API = 'https://prorab-bot-fmnz.onrender.com';
 let USER_ID = 0;
@@ -186,6 +278,8 @@ let currentProject = null;
 let allTransactions = [];
 let currentTab = 'active';
 let deleteProjectName = '';
+let selectedCat = '';
+let profitVisible = false;
 
 const CAT = {
   material:   { label: 'Материалы',      emoji: '🧱', color: '#D4500A' },
@@ -230,6 +324,8 @@ function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
 }
 
+// ─── ОБЪЕКТЫ ────────────────────────────────────────────
+
 async function loadProjects() {
   const list = document.getElementById('projects-list');
   list.innerHTML = '<div class="loading">Загрузка...</div>';
@@ -248,7 +344,7 @@ async function loadProjects() {
 async function renderProjects(projects) {
   const list = document.getElementById('projects-list');
   if (!projects.length) {
-    list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Нет активных объектов' : 'Архив пуст'}</div>`;
+    list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Нет активных объектов.<br>Нажми + Новый чтобы создать.' : 'Архив пуст'}</div>`;
     return;
   }
   let html = '';
@@ -270,14 +366,15 @@ async function renderProjects(projects) {
         <div class="project-stats">
           <div><div class="project-stat-label">Потрачено</div><div class="project-stat-value">${fmt(summary.total_spent)}</div></div>
           <div><div class="project-stat-label">От клиента</div><div class="project-stat-value" style="color:var(--green)">${fmt(summary.total_client)}</div></div>
-          <div><div class="project-stat-label">Прибыль</div><div class="project-stat-value" style="color:${summary.balance >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(summary.balance))}</div></div>
+          <div><div class="project-stat-label">Баланс</div><div class="project-stat-value" style="color:${summary.balance >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(summary.balance))}</div></div>
         </div>
         <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%;background:${over ? 'var(--red)' : 'var(--accent)'}"></div></div>
         <div style="color:var(--muted);font-size:11px;margin-top:4px;">${pct}% использовано</div>
       </div>
       <div class="project-actions">
         ${currentTab === 'active'
-          ? `<button class="project-action-btn" style="color:var(--muted)" onclick="archiveProject('${p.name.replace(/'/g, "\\'")}')">📦 В архив</button>`
+          ? `<button class="project-action-btn" style="color:var(--accent)" onclick="openProject('${p.name.replace(/'/g, "\\'")}')">➕ Добавить</button>
+             <button class="project-action-btn" style="color:var(--muted);border-left:1px solid var(--border)" onclick="archiveProject('${p.name.replace(/'/g, "\\'")}')">📦 В архив</button>`
           : `<button class="project-action-btn" style="color:var(--green);border-right:1px solid var(--border)" onclick="restoreProject('${p.name.replace(/'/g, "\\'")}')">↩️ Восстановить</button>
              <button class="project-action-btn" style="color:var(--red)" onclick="showDeleteModal('${p.name.replace(/'/g, "\\'")}')">🗑 Удалить</button>`
         }
@@ -301,9 +398,12 @@ function openProject(name) {
   loadDashboard();
 }
 
+// ─── ДАШБОРД ────────────────────────────────────────────
+
 async function loadDashboard() {
   const content = document.getElementById('dash-content');
   content.innerHTML = '<div class="loading">Загрузка...</div>';
+  profitVisible = false;
   try {
     const res = await fetch(`${API}/api/projects/${encodeURIComponent(currentProject)}/summary?user_id=${USER_ID}`);
     const s = await res.json();
@@ -343,14 +443,6 @@ async function loadDashboard() {
           <div class="progress-labels"><span>0%</span><span style="font-weight:600">${pct}%</span><span>100%</span></div>
         </div>
       </div>
-      <div style="background:${profit >= 0 ? 'var(--green-bg)' : 'var(--red-bg)'};border-radius:14px;padding:14px 16px;border:1px solid ${profit >= 0 ? 'rgba(26,122,74,0.2)' : 'rgba(192,57,43,0.2)'}">
-        <div style="color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;margin-bottom:8px;">📊 Прибыль объекта</div>
-        <div class="grid-3">
-          <div><div style="color:var(--muted);font-size:10px;">ПОЛУЧЕНО</div><div style="color:var(--green);font-weight:800;font-size:13px;">+${fmt(received)}</div></div>
-          <div><div style="color:var(--muted);font-size:10px;">РАСХОДЫ</div><div style="color:var(--red);font-weight:800;font-size:13px;">−${fmt(spent)}</div></div>
-          <div><div style="color:var(--muted);font-size:10px;">ИТОГО</div><div style="color:${profit >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:900;font-size:15px;">${profit >= 0 ? '+' : '−'}${fmt(Math.abs(profit))}</div></div>
-        </div>
-      </div>
       <div class="profit-block">
         <div class="profit-label">🏦 Моя прибыль</div>
         <div class="profit-row">
@@ -367,15 +459,14 @@ async function loadDashboard() {
         ${recentHtml || '<div class="empty">Нет записей</div>'}
       </div>
       <div class="grid-2">
-        <button class="btn btn-accent" onclick="alert('Ввод расходов — в Telegram боте')">+ Добавить</button>
-        <button class="btn btn-outline" onclick="alert('Отчёт — в разработке')">📄 Отчёт</button>
+        <button class="btn btn-accent" onclick="showAddModal()">+ Добавить</button>
+        <button class="btn btn-outline" onclick="showReport()">📄 Отчёт</button>
       </div>`;
   } catch(e) {
     content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки данных</div>';
   }
 }
 
-let profitVisible = false;
 function toggleProfit(amount) {
   profitVisible = !profitVisible;
   const el = document.getElementById('profit-display');
@@ -385,6 +476,8 @@ function toggleProfit(amount) {
     el.innerHTML = `<div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div>`;
   }
 }
+
+// ─── ТРАНЗАКЦИИ ─────────────────────────────────────────
 
 async function loadTransactions() {
   const list = document.getElementById('tx-list');
@@ -418,6 +511,158 @@ function filterTx(cat, btn) {
   const filtered = cat === 'all' ? allTransactions : allTransactions.filter(t => t.category === cat);
   renderTransactions(filtered);
 }
+
+// ─── ФОРМА: ДОБАВИТЬ РАСХОД ──────────────────────────────
+
+function showAddModal() {
+  selectedCat = '';
+  document.getElementById('add-item-name').value = '';
+  document.getElementById('add-amount').value = '';
+  document.getElementById('add-target').value = '';
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('selected'));
+  document.getElementById('modal-add').classList.remove('hidden');
+}
+
+function selectCat(el) {
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedCat = el.dataset.cat;
+}
+
+async function saveTransaction() {
+  const itemName = document.getElementById('add-item-name').value.trim();
+  const amount = parseFloat(document.getElementById('add-amount').value);
+  const target = document.getElementById('add-target').value.trim();
+
+  if (!selectedCat) { alert('Выбери категорию'); return; }
+  if (!itemName) { alert('Введи название'); return; }
+  if (!amount || amount <= 0) { alert('Введи сумму'); return; }
+
+  try {
+    const res = await fetch(`${API}/api/transactions/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: USER_ID,
+        project_name: currentProject,
+        category: selectedCat,
+        item_name: itemName,
+        amount: amount,
+        target_name: target || null
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeModal('modal-add');
+      loadDashboard();
+    } else {
+      alert('Ошибка сохранения');
+    }
+  } catch(e) {
+    alert('Ошибка подключения');
+  }
+}
+
+// ─── ФОРМА: НОВЫЙ ОБЪЕКТ ─────────────────────────────────
+
+function showNewProjectModal() {
+  document.getElementById('new-project-name').value = '';
+  document.getElementById('modal-new-project').classList.remove('hidden');
+}
+
+async function createProject() {
+  const name = document.getElementById('new-project-name').value.trim();
+  if (!name) { alert('Введи название объекта'); return; }
+
+  try {
+    const res = await fetch(`${API}/api/projects/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: USER_ID, project_name: name })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      closeModal('modal-new-project');
+      loadProjects();
+    } else {
+      alert('Объект с таким именем уже существует');
+    }
+  } catch(e) {
+    alert('Ошибка подключения');
+  }
+}
+
+// ─── ОТЧЁТ ───────────────────────────────────────────────
+
+async function showReport() {
+  showScreen('screen-report');
+  document.getElementById('report-project-name').textContent = currentProject;
+  const content = document.getElementById('report-content');
+  content.innerHTML = '<div class="loading">Загрузка...</div>';
+
+  try {
+    const res = await fetch(`${API}/api/projects/${encodeURIComponent(currentProject)}/summary?user_id=${USER_ID}`);
+    const s = await res.json();
+    const over = s.balance < 0;
+
+    let catsHtml = '';
+    for (const [cat, amount] of Object.entries(s.categories || {})) {
+      const info = CAT[cat] || { emoji: '📌', label: cat, color: '#888' };
+      const isIncome = cat === 'client';
+      catsHtml += `
+        <div class="report-row">
+          <span class="report-label">${info.emoji} ${info.label}</span>
+          <span class="report-value" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(amount)}</span>
+        </div>`;
+    }
+
+    content.innerHTML = `
+      <div class="report-total">
+        <span class="report-total-label">💰 От клиента получено</span>
+        <span class="report-total-value">+${fmt(s.total_client)}</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Расходы по категориям</div>
+        ${catsHtml || '<div class="empty">Нет расходов</div>'}
+        <div style="border-top:2px solid var(--border);margin-top:8px;padding-top:12px;display:flex;justify-content:space-between;">
+          <span style="font-weight:700;font-size:14px;">Итого расходов</span>
+          <span style="font-weight:900;font-size:15px;color:var(--red)">−${fmt(s.total_spent)}</span>
+        </div>
+      </div>
+      <div class="card" style="background:${over ? 'var(--red-bg)' : 'var(--green-bg)'};border-color:${over ? 'rgba(192,57,43,0.2)' : 'rgba(26,122,74,0.2)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:700;font-size:15px;color:${over ? 'var(--red)' : 'var(--green)'}">
+            ${over ? '🟥 Перерасход' : '🟩 Прибыль объекта'}
+          </span>
+          <span style="font-weight:900;font-size:20px;color:${over ? 'var(--red)' : 'var(--green)'}">
+            ${over ? '−' : '+'}${fmt(Math.abs(s.balance))}
+          </span>
+        </div>
+      </div>
+      <div class="profit-block">
+        <div class="profit-label">🏦 Моя личная прибыль</div>
+        <div class="profit-row">
+          <div id="report-profit-display"><div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div></div>
+          <button class="eye-btn" onclick="toggleReportProfit(${s.my_profit || 0})">👁</button>
+        </div>
+      </div>`;
+  } catch(e) {
+    content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки отчёта</div>';
+  }
+}
+
+let reportProfitVisible = false;
+function toggleReportProfit(amount) {
+  reportProfitVisible = !reportProfitVisible;
+  const el = document.getElementById('report-profit-display');
+  if (reportProfitVisible) {
+    el.innerHTML = `<div class="profit-amount">${fmt(amount)}</div>`;
+  } else {
+    el.innerHTML = `<div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div>`;
+  }
+}
+
+// ─── АРХИВ / УДАЛИТЬ ─────────────────────────────────────
 
 async function archiveProject(name) {
   await fetch(`${API}/api/projects/archive`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: name }) });
@@ -455,10 +700,6 @@ async function confirmDelete() {
   await fetch(`${API}/api/projects/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: deleteProjectName }) });
   closeModal('modal-delete');
   loadProjects();
-}
-
-function showNewProject() {
-  alert('Создание объектов — через Telegram бот командой /start');
 }
 </script>
 </body>
