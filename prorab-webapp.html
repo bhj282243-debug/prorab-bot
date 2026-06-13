@@ -2,140 +2,376 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>Прораб-ERP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>Прораб</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Inter', -apple-system, sans-serif; background: #F5F4F0; color: #1A1A18; min-height: 100vh; }
+
   :root {
-    --bg: #F5F4F0; --surface: #fff; --border: #E2DFD8;
-    --ink: #1A1A18; --muted: #8A8880;
-    --accent: #D4500A; --accent-bg: #FDF1EB;
-    --green: #1A7A4A; --green-bg: #EBF7F1;
-    --red: #C0392B; --red-bg: #FDECEA;
-    --purple: #6C3483; --purple-bg: #F4ECF7;
+    --bg:      #F8FAFC;
+    --surface: #FFFFFF;
+    --border:  #E2E8F0;
+    --ink:     #0F172A;
+    --muted:   #64748B;
+    --primary: #1E40AF;
+    --primary-bg: #EFF6FF;
+    --success: #16A34A;
+    --success-bg: #F0FDF4;
+    --warning: #D97706;
+    --warning-bg: #FFFBEB;
+    --danger:  #DC2626;
+    --danger-bg: #FEF2F2;
+    --profit-color: #7C3AED;
+    --profit-bg: #F5F3FF;
   }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── SCREENS ── */
   .screen { display: none; flex-direction: column; min-height: 100vh; }
   .screen.active { display: flex; }
-  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 20; }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 13px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 20;
+  }
   .topbar-left { display: flex; align-items: center; gap: 10px; }
-  .back-btn { background: none; border: none; color: var(--accent); font-size: 22px; cursor: pointer; padding: 0; }
-  .topbar h1 { font-size: 17px; font-weight: 800; color: var(--ink); }
+  .topbar-brand { display: flex; flex-direction: column; }
+  .topbar-brand-name { font-size: 17px; font-weight: 800; color: var(--ink); letter-spacing: -0.3px; }
+  .topbar-brand-sub  { font-size: 10px; font-weight: 500; color: var(--muted); margin-top: 1px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .topbar h1 { font-size: 17px; font-weight: 700; color: var(--ink); }
+  .back-btn {
+    background: none; border: none; cursor: pointer; padding: 4px;
+    color: var(--primary); display: flex; align-items: center;
+  }
+
+  /* ── BADGE ── */
   .badge { padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
-  .badge-green { background: var(--green-bg); color: var(--green); }
-  .badge-red { background: var(--red-bg); color: var(--red); }
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-danger  { background: var(--danger-bg);  color: var(--danger);  }
+
+  /* ── CONTENT ── */
   .content { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); padding: 16px; }
-  .card-title { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 10px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .metric-label { color: var(--muted); font-size: 10px; font-weight: 600; text-transform: uppercase; margin-bottom: 3px; }
-  .metric-value { font-weight: 800; font-size: 13px; line-height: 1.2; }
-  .progress-wrap { margin-top: 14px; }
-  .progress-bar-bg { background: var(--border); border-radius: 6px; height: 10px; overflow: hidden; }
-  .progress-bar-fill { height: 100%; border-radius: 6px; transition: width 0.5s; }
-  .progress-labels { display: flex; justify-content: space-between; margin-top: 4px; }
-  .progress-labels span { color: var(--muted); font-size: 11px; }
-  .profit-block { background: var(--purple-bg); border-radius: 14px; padding: 14px 16px; border: 1px solid rgba(108,52,131,0.2); }
-  .profit-label { color: var(--purple); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-  .profit-row { display: flex; align-items: center; gap: 8px; }
-  .profit-amount { color: var(--purple); font-weight: 900; font-size: 20px; }
-  .profit-dots { display: flex; gap: 4px; align-items: center; }
-  .profit-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--purple); opacity: 0.5; }
-  .eye-btn { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--purple); opacity: 0.7; }
-  .cat-row { margin-bottom: 10px; }
-  .cat-row-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
-  .cat-row-name { color: var(--ink); font-size: 13px; }
+
+  /* ── UNIVERSAL CARD ── */
+  .card {
+    background: var(--surface);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    padding: 18px;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+  }
+  .card-title {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+  }
+
+  /* ── PROJECT CARD (Финтех-карточка объекта) ── */
+  .project-card {
+    background: var(--surface);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+  }
+  .project-card-body { padding: 18px 18px 14px; cursor: pointer; }
+  .project-card-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 14px;
+  }
+  .project-name { font-weight: 700; font-size: 16px; color: var(--ink); }
+
+  /* Главная метрика — прибыль */
+  .project-main-metric { margin-bottom: 14px; }
+  .project-main-amount {
+    font-size: 26px; font-weight: 800; color: var(--ink);
+    letter-spacing: -0.5px; line-height: 1.1;
+  }
+  .project-main-amount.positive { color: var(--success); }
+  .project-main-amount.negative { color: var(--danger); }
+  .project-main-label {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px;
+  }
+
+  /* Второстепенные метрики */
+  .project-sub-metrics {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0; padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  .project-sub-item {}
+  .project-sub-item:first-child { padding-right: 14px; border-right: 1px solid var(--border); }
+  .project-sub-item:last-child  { padding-left: 14px; }
+  .project-sub-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .project-sub-value { font-size: 14px; font-weight: 700; color: var(--ink); }
+
+  /* Действия карточки */
+  .project-actions {
+    border-top: 1px solid var(--border);
+    display: flex; background: var(--bg);
+  }
+  .project-action-btn {
+    flex: 1; padding: 11px; background: none; border: none;
+    font-weight: 600; font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .tab {
+    flex: 1; padding: 9px; border-radius: 10px;
+    cursor: pointer; border: none; font-weight: 700; font-size: 13px;
+  }
+  .tab.active   { background: var(--primary-bg); color: var(--primary); border: 1px solid rgba(30,64,175,0.25); }
+  .tab.inactive { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── BOTTOM NAV ── */
+  .bottom-nav {
+    display: flex; border-top: 1px solid var(--border);
+    background: var(--surface); position: sticky; bottom: 0; z-index: 20;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
+  }
+  .nav-btn {
+    flex: 1; padding: 10px 0 8px; background: none; border: none;
+    cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .nav-icon { width: 22px; height: 22px; color: var(--muted); }
+  .nav-btn.active .nav-icon { color: var(--primary); }
+  .nav-label { font-size: 10px; font-weight: 600; color: var(--muted); }
+  .nav-btn.active .nav-label { color: var(--primary); }
+  .nav-indicator { width: 18px; height: 2px; background: var(--primary); border-radius: 1px; margin-top: 1px; }
+
+  /* ── BUTTONS ── */
+  .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-outline  { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
+  .btn-success  { background: var(--success); color: #fff; }
+  .btn-sm {
+    padding: 7px 14px; border-radius: 8px; border: none;
+    font-weight: 700; font-size: 13px; cursor: pointer;
+    background: var(--primary); color: #fff;
+  }
+
+  /* ── DASHBOARD METRICS ── */
+  .dash-hero {
+    background: var(--surface); border-radius: 18px;
+    border: 1px solid var(--border);
+    padding: 20px 18px 18px;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+  }
+  .dash-hero-label {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;
+  }
+  .dash-hero-amount {
+    font-size: 32px; font-weight: 800; letter-spacing: -0.8px; color: var(--ink);
+    line-height: 1;
+  }
+  .dash-hero-amount.positive { color: var(--success); }
+  .dash-hero-amount.negative { color: var(--danger); }
+  .dash-sub-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 0; border-top: 1px solid var(--border); margin-top: 16px; padding-top: 14px;
+  }
+  .dash-sub-item { text-align: center; }
+  .dash-sub-item:not(:last-child) { border-right: 1px solid var(--border); }
+  .dash-sub-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .dash-sub-value { font-size: 12px; font-weight: 700; color: var(--ink); }
+
+  /* ── PROFIT BLOCK ── */
+  .profit-block {
+    background: var(--profit-bg);
+    border-radius: 18px; padding: 16px 18px;
+    border: 1px solid rgba(124,58,237,0.15);
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+  }
+  .profit-label { color: var(--profit-color); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .profit-row { display: flex; align-items: center; justify-content: space-between; }
+  .profit-amount { color: var(--profit-color); font-weight: 800; font-size: 24px; letter-spacing: -0.5px; }
+  .profit-dots { display: flex; gap: 5px; align-items: center; }
+  .profit-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--profit-color); opacity: 0.4; }
+  .eye-btn { background: none; border: none; cursor: pointer; color: var(--profit-color); padding: 4px; opacity: 0.7; }
+
+  /* ── CATEGORY BARS ── */
+  .cat-row { margin-bottom: 12px; }
+  .cat-row:last-child { margin-bottom: 0; }
+  .cat-row-header { display: flex; justify-content: space-between; margin-bottom: 5px; }
+  .cat-row-name { color: var(--ink); font-size: 13px; font-weight: 500; }
   .cat-row-amount { color: var(--ink); font-weight: 700; font-size: 13px; }
-  .cat-bar-bg { background: var(--border); border-radius: 3px; height: 5px; }
-  .cat-bar-fill { height: 5px; border-radius: 3px; }
-  .tx-item { display: flex; align-items: center; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .cat-bar-bg { background: var(--border); border-radius: 4px; height: 5px; }
+  .cat-bar-fill { height: 5px; border-radius: 4px; }
+
+  /* ── TRANSACTIONS ── */
+  .tx-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
   .tx-item:last-child { border-bottom: none; }
-  .tx-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+  .tx-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
   .tx-info { flex: 1; min-width: 0; }
   .tx-name { color: var(--ink); font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tx-meta { color: var(--muted); font-size: 11px; margin-top: 1px; }
-  .tx-amount { font-weight: 800; font-size: 14px; flex-shrink: 0; }
-  .project-card { background: var(--surface); border-radius: 14px; border: 1px solid var(--border); overflow: hidden; margin-bottom: 10px; }
-  .project-card-body { padding: 14px 16px; cursor: pointer; }
-  .project-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-  .project-name { color: var(--ink); font-weight: 800; font-size: 15px; }
-  .project-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
-  .project-stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
-  .project-stat-value { font-weight: 700; font-size: 12px; }
-  .project-actions { border-top: 1px solid var(--border); display: flex; background: var(--bg); }
-  .project-action-btn { flex: 1; padding: 10px; background: none; border: none; font-weight: 600; font-size: 12px; cursor: pointer; }
-  .bottom-nav { display: flex; border-top: 1px solid var(--border); background: var(--surface); position: sticky; bottom: 0; z-index: 20; }
-  .nav-btn { flex: 1; padding: 12px 0 10px; background: none; border: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-  .nav-icon { font-size: 20px; }
-  .nav-label { font-size: 11px; font-weight: 600; color: var(--muted); }
-  .nav-btn.active .nav-label { color: var(--accent); }
-  .nav-indicator { width: 20px; height: 2px; background: var(--accent); border-radius: 1px; }
-  .btn { padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 14px; cursor: pointer; width: 100%; }
-  .btn-accent { background: var(--accent); color: #fff; }
-  .btn-outline { background: var(--surface); color: var(--ink); border: 1px solid var(--border); }
-  .btn-green { background: var(--green); color: #fff; }
-  .tabs { display: flex; gap: 8px; margin-bottom: 12px; }
-  .tab { flex: 1; padding: 9px; border-radius: 10px; cursor: pointer; border: none; font-weight: 700; font-size: 13px; }
-  .tab.active { background: var(--accent-bg); color: var(--accent); border: 1px solid rgba(212,80,10,0.3); }
-  .tab.inactive { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
-  .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 4px; }
-  .filter-btn { padding: 6px 13px; border-radius: 20px; white-space: nowrap; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600; }
-  .filter-btn.active { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
-  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 14px; }
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: flex-end; }
-  .modal { background: var(--surface); width: 100%; border-radius: 20px 20px 0 0; padding: 24px 20px; max-height: 90vh; overflow-y: auto; }
-  .modal h2 { font-size: 17px; font-weight: 800; margin-bottom: 16px; text-align: center; }
-  .modal-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
-  .delete-word { background: var(--red-bg); border: 1px solid rgba(192,57,43,0.3); border-radius: 10px; padding: 10px; text-align: center; margin-bottom: 12px; }
-  .delete-word span { color: var(--red); font-weight: 900; font-size: 18px; letter-spacing: 3px; }
-  .delete-input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid var(--border); font-size: 15px; text-align: center; font-weight: 700; outline: none; margin-bottom: 12px; }
-  .delete-input.valid { border-color: var(--red); }
-  .hidden { display: none !important; }
-  .empty { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; }
-  /* Form styles */
-  .form-group { margin-bottom: 14px; }
-  .form-label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px; }
-  .form-input { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 15px; background: var(--bg); color: var(--ink); outline: none; }
-  .form-input:focus { border-color: var(--accent); background: #fff; }
-  .form-select { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border); font-size: 15px; background: var(--bg); color: var(--ink); outline: none; appearance: none; }
-  .form-select:focus { border-color: var(--accent); background: #fff; }
-  .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .cat-chip { padding: 8px 14px; border-radius: 20px; border: 1.5px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; }
-  .cat-chip.selected { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
-  /* Report styles */
+  .tx-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .tx-amount { font-weight: 700; font-size: 14px; flex-shrink: 0; }
+
+  /* ── FILTERS ── */
+  .filters { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 4px; scrollbar-width: none; }
+  .filters::-webkit-scrollbar { display: none; }
+  .filter-btn {
+    padding: 6px 14px; border-radius: 20px; white-space: nowrap;
+    cursor: pointer; border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 600;
+  }
+  .filter-btn.active { border-color: var(--primary); background: var(--primary-bg); color: var(--primary); }
+
+  /* ── REPORT ── */
+  .report-total {
+    background: var(--success-bg); border-radius: 14px;
+    padding: 16px 18px; display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; border: 1px solid rgba(22,163,74,0.2);
+  }
+  .report-total-label { font-size: 13px; font-weight: 700; color: var(--success); }
+  .report-total-value { font-size: 20px; font-weight: 800; color: var(--success); letter-spacing: -0.5px; }
   .report-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border); }
   .report-row:last-child { border-bottom: none; }
   .report-label { font-size: 14px; color: var(--ink); }
-  .report-value { font-size: 15px; font-weight: 800; }
-  .report-total { background: var(--accent-bg); border-radius: 12px; padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-  .report-total-label { font-size: 13px; font-weight: 700; color: var(--accent); }
-  .report-total-value { font-size: 18px; font-weight: 900; color: var(--accent); }
+  .report-value { font-size: 15px; font-weight: 700; }
+
+  /* ── MODALS ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; display: flex; align-items: flex-end; }
+  .modal { background: var(--surface); width: 100%; border-radius: 24px 24px 0 0; padding: 24px 20px 32px; max-height: 90vh; overflow-y: auto; }
+  .modal h2 { font-size: 17px; font-weight: 800; margin-bottom: 16px; text-align: center; color: var(--ink); }
+  .modal-btn { width: 100%; padding: 14px; border-radius: 12px; border: none; font-weight: 700; font-size: 15px; cursor: pointer; margin-bottom: 10px; }
+
+  /* ── FORMS ── */
+  .form-group { margin-bottom: 14px; }
+  .form-label { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+  .form-input {
+    width: 100%; padding: 12px 14px; border-radius: 11px;
+    border: 1.5px solid var(--border); font-size: 15px;
+    background: var(--bg); color: var(--ink); outline: none;
+    font-family: inherit;
+  }
+  .form-input:focus { border-color: var(--primary); background: #fff; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* ── CAT CHIPS ── */
+  .cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cat-chip {
+    padding: 8px 14px; border-radius: 20px;
+    border: 1.5px solid var(--border); background: var(--surface);
+    color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .cat-chip.selected { border-color: var(--primary); background: var(--primary-bg); color: var(--primary); }
+
+  /* ── DELETE ── */
+  .delete-word { background: var(--danger-bg); border: 1px solid rgba(220,38,38,0.25); border-radius: 10px; padding: 10px; text-align: center; margin-bottom: 12px; }
+  .delete-word span { color: var(--danger); font-weight: 900; font-size: 18px; letter-spacing: 3px; }
+  .delete-input { width: 100%; padding: 12px; border-radius: 10px; border: 2px solid var(--border); font-size: 15px; text-align: center; font-weight: 700; outline: none; margin-bottom: 12px; font-family: inherit; }
+  .delete-input.valid { border-color: var(--danger); }
+
+  /* ── MISC ── */
+  .hidden  { display: none !important; }
+  .empty   { text-align: center; color: var(--muted); padding: 40px 0; font-size: 14px; line-height: 1.6; }
+  .loading { display: flex; align-items: center; justify-content: center; padding: 40px; color: var(--muted); font-size: 14px; gap: 8px; }
+
+  /* ── SKELETON LOADING ── */
+  @keyframes shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position:  400px 0; }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #E2E8F0 25%, #F1F5F9 50%, #E2E8F0 75%);
+    background-size: 800px 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: 8px;
+  }
+  .skeleton-card {
+    background: var(--surface);
+    border-radius: 18px;
+    border: 1px solid var(--border);
+    padding: 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+  }
+  .sk-line { height: 12px; margin-bottom: 10px; }
+  .sk-title   { width: 55%; }
+  .sk-badge   { width: 22%; height: 20px; border-radius: 20px; }
+  .sk-amount  { width: 70%; height: 28px; margin: 14px 0 6px; border-radius: 6px; }
+  .sk-sub     { width: 38%; height: 10px; }
+  .sk-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .sk-sub2    { width: 100%; height: 12px; }
+
+  /* ── CARD APPEAR ANIMATION ── */
+  @keyframes cardAppear {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .card-animate {
+    animation: cardAppear 0.3s ease forwards;
+    opacity: 0;
+  }
+  .card-animate:nth-child(1) { animation-delay: 0ms; }
+  .card-animate:nth-child(2) { animation-delay: 60ms; }
+  .card-animate:nth-child(3) { animation-delay: 120ms; }
+  .card-animate:nth-child(4) { animation-delay: 180ms; }
+  .card-animate:nth-child(5) { animation-delay: 240ms; }
+
+  /* ── BUTTON PRESS FEEDBACK ── */
+  .btn          { transition: transform 0.1s ease, opacity 0.1s ease; }
+  .btn:active   { transform: scale(0.97); opacity: 0.85; }
+  .btn-sm:active          { transform: scale(0.96); }
+  .project-action-btn:active { opacity: 0.6; }
+  .nav-btn:active         { opacity: 0.6; }
+  .cat-chip               { transition: all 0.15s ease; }
+  .filter-btn             { transition: all 0.15s ease; }
 </style>
 </head>
 <body>
 
-<!-- ЭКРАН: СПИСОК ОБЪЕКТОВ -->
+<!-- ═══════════════════════════════════════════════════════
+     ЭКРАН: СПИСОК ОБЪЕКТОВ
+════════════════════════════════════════════════════════ -->
 <div class="screen active" id="screen-projects">
   <div class="topbar">
-    <div class="topbar-left"><h1>Мои объекты</h1></div>
-    <button class="btn-accent" style="padding:6px 14px;border-radius:8px;border:none;font-weight:700;font-size:13px;cursor:pointer;" onclick="showNewProjectModal()">+ Новый</button>
+    <div class="topbar-left">
+      <div class="topbar-brand">
+        <span class="topbar-brand-name">Прораб</span>
+        <span class="topbar-brand-sub">Контроль финансов</span>
+      </div>
+    </div>
+    <button class="btn-sm" onclick="showNewProjectModal()">+ Новый</button>
   </div>
   <div class="content">
     <div class="tabs">
-      <button class="tab active" id="tab-active" onclick="switchTab('active')">Активные</button>
+      <button class="tab active"   id="tab-active"   onclick="switchTab('active')">Активные</button>
       <button class="tab inactive" id="tab-archived" onclick="switchTab('archived')">Архив</button>
     </div>
     <div id="projects-list"><div class="loading">Загрузка...</div></div>
   </div>
 </div>
 
-<!-- ЭКРАН: ДАШБОРД ОБЪЕКТА -->
+<!-- ═══════════════════════════════════════════════════════
+     ЭКРАН: ДАШБОРД ОБЪЕКТА
+════════════════════════════════════════════════════════ -->
 <div class="screen" id="screen-dashboard">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="goBack()">←</button>
+      <button class="back-btn" onclick="goBack()">
+        <!-- SVG: стрелка назад -->
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
       <h1 id="dash-title">Объект</h1>
     </div>
     <span class="badge" id="dash-status-badge"></span>
@@ -145,86 +381,107 @@
   </div>
   <div class="bottom-nav">
     <button class="nav-btn active" onclick="showDashboard()">
-      <span class="nav-icon">🏠</span>
+      <!-- SVG: дом -->
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span class="nav-label">Объект</span>
       <div class="nav-indicator"></div>
     </button>
     <button class="nav-btn" onclick="showScreen('screen-list'); loadTransactions()">
-      <span class="nav-icon">📋</span>
+      <!-- SVG: список -->
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       <span class="nav-label">Список</span>
     </button>
     <button class="nav-btn" onclick="showReport()">
-      <span class="nav-icon">📊</span>
+      <!-- SVG: отчёт -->
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-label">Отчёт</span>
     </button>
   </div>
 </div>
 
-<!-- ЭКРАН: СПИСОК ТРАНЗАКЦИЙ -->
+<!-- ═══════════════════════════════════════════════════════
+     ЭКРАН: СПИСОК ТРАНЗАКЦИЙ
+════════════════════════════════════════════════════════ -->
 <div class="screen" id="screen-list">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="showDashboard()">←</button>
+      <button class="back-btn" onclick="showDashboard()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
       <h1>Все записи</h1>
     </div>
-    <button style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;" onclick="showAddModal()">+ Добавить</button>
+    <button class="btn-sm" onclick="showAddModal()">+ Добавить</button>
   </div>
   <div class="content">
     <div class="filters" id="tx-filters">
       <button class="filter-btn active" onclick="filterTx('all', this)">Все</button>
-      <button class="filter-btn" onclick="filterTx('material', this)">🧱 Материалы</button>
-      <button class="filter-btn" onclick="filterTx('worker', this)">👷 Рабочие</button>
-      <button class="filter-btn" onclick="filterTx('road', this)">🚗 Логистика</button>
-      <button class="filter-btn" onclick="filterTx('unexpected', this)">⚠️ Непредвид.</button>
-      <button class="filter-btn" onclick="filterTx('client', this)">💰 От клиента</button>
+      <button class="filter-btn" onclick="filterTx('material', this)">Материалы</button>
+      <button class="filter-btn" onclick="filterTx('worker', this)">Рабочие</button>
+      <button class="filter-btn" onclick="filterTx('road', this)">Логистика</button>
+      <button class="filter-btn" onclick="filterTx('unexpected', this)">Непредвид.</button>
+      <button class="filter-btn" onclick="filterTx('client', this)">От клиента</button>
     </div>
     <div id="tx-list"><div class="loading">Загрузка...</div></div>
   </div>
   <div class="bottom-nav">
     <button class="nav-btn" onclick="showDashboard()">
-      <span class="nav-icon">🏠</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       <span class="nav-label">Объект</span>
     </button>
     <button class="nav-btn active" onclick="showScreen('screen-list')">
-      <span class="nav-icon">📋</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       <span class="nav-label">Список</span>
       <div class="nav-indicator"></div>
     </button>
     <button class="nav-btn" onclick="showReport()">
-      <span class="nav-icon">📊</span>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       <span class="nav-label">Отчёт</span>
     </button>
   </div>
 </div>
 
-<!-- ЭКРАН: ОТЧЁТ -->
+<!-- ═══════════════════════════════════════════════════════
+     ЭКРАН: ОТЧЁТ
+════════════════════════════════════════════════════════ -->
 <div class="screen" id="screen-report">
   <div class="topbar">
     <div class="topbar-left">
-      <button class="back-btn" onclick="showDashboard()">←</button>
+      <button class="back-btn" onclick="showDashboard()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
       <h1>Отчёт</h1>
     </div>
-    <span id="report-project-name" style="font-size:13px;font-weight:700;color:var(--muted)"></span>
+    <span id="report-project-name" style="font-size:13px;font-weight:600;color:var(--muted)"></span>
   </div>
   <div class="content" id="report-content">
     <div class="loading">Загрузка...</div>
   </div>
 </div>
 
-<!-- МОДАЛ: УДАЛИТЬ ОБЪЕКТ -->
+<!-- ═══════════════════════════════════════════════════════
+     МОДАЛ: УДАЛИТЬ ОБЪЕКТ
+════════════════════════════════════════════════════════ -->
 <div class="modal-overlay hidden" id="modal-delete">
   <div class="modal">
-    <div style="font-size:28px;text-align:center;margin-bottom:8px;">⚠️</div>
+    <div style="font-size:32px;text-align:center;margin-bottom:8px;">⚠️</div>
     <h2>Удалить объект?</h2>
-    <p style="color:var(--muted);font-size:13px;text-align:center;margin-bottom:16px;line-height:1.6;">Все записи будут удалены навсегда.<br>Для подтверждения напиши слово:</p>
+    <p style="color:var(--muted);font-size:13px;text-align:center;margin-bottom:16px;line-height:1.6;">
+      Все записи будут удалены навсегда.<br>Для подтверждения напиши слово:
+    </p>
     <div class="delete-word"><span>УДАЛИТЬ</span></div>
     <input class="delete-input" id="delete-input" placeholder="Введи УДАЛИТЬ" oninput="checkDeleteInput()" />
-    <button class="modal-btn" id="delete-confirm-btn" style="background:var(--border);color:var(--muted);" disabled onclick="confirmDelete()">Удалить навсегда</button>
-    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-delete')">Отмена</button>
+    <button class="modal-btn" id="delete-confirm-btn"
+      style="background:var(--border);color:var(--muted);" disabled onclick="confirmDelete()">
+      Удалить навсегда
+    </button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);"
+      onclick="closeModal('modal-delete')">Отмена</button>
   </div>
 </div>
 
-<!-- МОДАЛ: НОВЫЙ ОБЪЕКТ -->
+<!-- ═══════════════════════════════════════════════════════
+     МОДАЛ: НОВЫЙ ОБЪЕКТ
+════════════════════════════════════════════════════════ -->
 <div class="modal-overlay hidden" id="modal-new-project">
   <div class="modal">
     <h2>Новый объект</h2>
@@ -232,31 +489,34 @@
       <label class="form-label">Название объекта</label>
       <input class="form-input" id="new-project-name" placeholder="Например: ЖК Сити, Вилла 777" />
     </div>
-    <button class="modal-btn btn-accent" onclick="createProject()">Создать объект</button>
-    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-new-project')">Отмена</button>
+    <button class="modal-btn btn-primary" onclick="createProject()">Создать объект</button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);"
+      onclick="closeModal('modal-new-project')">Отмена</button>
   </div>
 </div>
 
-<!-- МОДАЛ: ДОБАВИТЬ РАСХОД/ДОХОД -->
+<!-- ═══════════════════════════════════════════════════════
+     МОДАЛ: ДОБАВИТЬ ЗАПИСЬ
+════════════════════════════════════════════════════════ -->
 <div class="modal-overlay hidden" id="modal-add">
   <div class="modal">
     <h2>Добавить запись</h2>
     <div class="form-group">
       <label class="form-label">Категория</label>
       <div class="cat-chips" id="cat-chips">
-        <div class="cat-chip" data-cat="material" onclick="selectCat(this)">🧱 Материалы</div>
-        <div class="cat-chip" data-cat="worker" onclick="selectCat(this)">👷 Рабочие</div>
-        <div class="cat-chip" data-cat="road" onclick="selectCat(this)">🚗 Логистика</div>
-        <div class="cat-chip" data-cat="unexpected" onclick="selectCat(this)">⚠️ Непредвид.</div>
-        <div class="cat-chip" data-cat="client" onclick="selectCat(this)">💰 От клиента</div>
-        <div class="cat-chip" data-cat="profit" onclick="selectCat(this)">🏦 Моя прибыль</div>
+        <div class="cat-chip" data-cat="material"   onclick="selectCat(this)">Материалы</div>
+        <div class="cat-chip" data-cat="worker"     onclick="selectCat(this)">Рабочие</div>
+        <div class="cat-chip" data-cat="road"       onclick="selectCat(this)">Логистика</div>
+        <div class="cat-chip" data-cat="unexpected" onclick="selectCat(this)">Непредвид.</div>
+        <div class="cat-chip" data-cat="client"     onclick="selectCat(this)">От клиента</div>
+        <div class="cat-chip" data-cat="profit"     onclick="selectCat(this)">Моя прибыль</div>
       </div>
     </div>
     <div class="form-group">
       <label class="form-label">Название / Описание</label>
       <input class="form-input" id="add-item-name" placeholder="Что именно?" />
     </div>
-    <div class="grid-2" style="gap:10px;margin-bottom:14px;">
+    <div class="grid-2" style="margin-bottom:14px;">
       <div class="form-group" style="margin:0">
         <label class="form-label">Сумма (сум)</label>
         <input class="form-input" id="add-amount" type="number" placeholder="0" />
@@ -266,8 +526,9 @@
         <input class="form-input" id="add-target" placeholder="Имя (необяз.)" />
       </div>
     </div>
-    <button class="modal-btn btn-accent" onclick="saveTransaction()">Сохранить</button>
-    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);" onclick="closeModal('modal-add')">Отмена</button>
+    <button class="modal-btn btn-primary" onclick="saveTransaction()">Сохранить</button>
+    <button class="modal-btn" style="background:var(--bg);border:1px solid var(--border);color:var(--ink);"
+      onclick="closeModal('modal-add')">Отмена</button>
   </div>
 </div>
 
@@ -282,18 +543,79 @@ let selectedCat = '';
 let profitVisible = false;
 
 const CAT = {
-  material:   { label: 'Материалы',      emoji: '🧱', color: '#D4500A' },
-  worker:     { label: 'Рабочие',        emoji: '👷', color: '#2980B9' },
-  road:       { label: 'Логистика',      emoji: '🚗', color: '#8E44AD' },
-  unexpected: { label: 'Непредвиденные', emoji: '⚠️', color: '#E67E22' },
-  client:     { label: 'От клиента',     emoji: '💰', color: '#1A7A4A' },
-  profit:     { label: 'Моя прибыль',    emoji: '🏦', color: '#6C3483' },
+  material:   { label: 'Материалы',      color: '#2563EB' },
+  worker:     { label: 'Рабочие',        color: '#0891B2' },
+  road:       { label: 'Логистика',      color: '#7C3AED' },
+  unexpected: { label: 'Непредвиден.',   color: '#D97706' },
+  client:     { label: 'От клиента',     color: '#16A34A' },
+  profit:     { label: 'Моя прибыль',    color: '#7C3AED' },
 };
 
+// ─── ФОРМАТИРОВАНИЕ ЧИСЕЛ ────────────────────────────────
+// Полный формат — только для отчёта (12 500 000 сум)
 function fmt(n) {
   return new Intl.NumberFormat('ru-RU').format(Math.round(n || 0)) + ' сум';
 }
 
+// Короткий формат — везде в UI кроме отчёта (12.5 млн сум)
+function fmtShort(n) {
+  n = Math.round(n || 0);
+  if (n >= 1_000_000) {
+    const m = n / 1_000_000;
+    const val = Math.round(m * 10) / 10;
+    return (val % 1 === 0 ? val.toFixed(0) : val) + ' млн сум';
+  }
+  if (n >= 1_000) {
+    const k = Math.round(n / 1_000);
+    return k + ' тыс сум';
+  }
+  return new Intl.NumberFormat('ru-RU').format(n) + ' сум';
+}
+
+// ─── SKELETON LOADING ────────────────────────────────────
+function skeletonProjects(count = 2) {
+  let html = '';
+  for (let i = 0; i < count; i++) {
+    html += `
+    <div class="skeleton-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div class="skeleton sk-line sk-title"></div>
+        <div class="skeleton sk-badge"></div>
+      </div>
+      <div class="skeleton sk-amount"></div>
+      <div class="skeleton sk-line sk-sub"></div>
+      <div class="sk-row">
+        <div class="skeleton sk-sub2"></div>
+        <div class="skeleton sk-sub2"></div>
+      </div>
+    </div>`;
+  }
+  return html;
+}
+
+function skeletonDashboard() {
+  return `
+    <div class="skeleton-card">
+      <div class="skeleton sk-line sk-sub" style="width:40%;margin-bottom:8px;"></div>
+      <div class="skeleton" style="height:36px;width:65%;border-radius:6px;margin-bottom:14px;"></div>
+      <div class="sk-row" style="grid-template-columns:1fr 1fr 1fr;">
+        <div class="skeleton sk-sub2"></div>
+        <div class="skeleton sk-sub2"></div>
+        <div class="skeleton sk-sub2"></div>
+      </div>
+    </div>
+    <div class="skeleton-card" style="height:80px;"></div>
+    <div class="skeleton-card">
+      <div class="skeleton sk-line sk-sub" style="margin-bottom:14px;"></div>
+      ${[1,2,3].map(() => `
+        <div style="margin-bottom:12px;">
+          <div class="skeleton sk-line" style="width:100%;margin-bottom:6px;"></div>
+          <div class="skeleton" style="height:5px;width:100%;border-radius:4px;"></div>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ─── ИНИЦИАЛИЗАЦИЯ ───────────────────────────────────────
 window.addEventListener('load', () => {
   if (window.Telegram?.WebApp) {
     Telegram.WebApp.ready();
@@ -325,10 +647,9 @@ function closeModal(id) {
 }
 
 // ─── ОБЪЕКТЫ ────────────────────────────────────────────
-
 async function loadProjects() {
   const list = document.getElementById('projects-list');
-  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  list.innerHTML = skeletonProjects(3);
   try {
     const endpoint = currentTab === 'active'
       ? `${API}/api/projects?user_id=${USER_ID}`
@@ -337,47 +658,95 @@ async function loadProjects() {
     const projects = await res.json();
     renderProjects(projects);
   } catch(e) {
-    list.innerHTML = '<div class="empty">⚠️ Ошибка загрузки. Проверь подключение.</div>';
+    list.innerHTML = '<div class="empty">⚠️ Ошибка загрузки.<br>Проверь подключение.</div>';
   }
 }
 
 async function renderProjects(projects) {
   const list = document.getElementById('projects-list');
   if (!projects.length) {
-    list.innerHTML = `<div class="empty">${currentTab === 'active' ? 'Нет активных объектов.<br>Нажми + Новый чтобы создать.' : 'Архив пуст'}</div>`;
+    list.innerHTML = `<div class="empty">${
+      currentTab === 'active'
+        ? 'Нет активных объектов.<br>Нажми + Новый чтобы создать.'
+        : 'Архив пуст'
+    }</div>`;
     return;
   }
+
+  // Параллельная загрузка summary для всех проектов
+  const summaries = await Promise.all(
+    projects.map(async (p) => {
+      try {
+        const r = await fetch(`${API}/api/projects/${encodeURIComponent(p.name)}/summary?user_id=${USER_ID}`);
+        const data = await r.json();
+        return { name: p.name, data };
+      } catch(e) {
+        return { name: p.name, data: { total_spent: 0, total_client: 0, balance: 0 } };
+      }
+    })
+  );
+
   let html = '';
-  for (const p of projects) {
-    let summary = { total_spent: 0, total_client: 0, balance: 0 };
-    try {
-      const r = await fetch(`${API}/api/projects/${encodeURIComponent(p.name)}/summary?user_id=${USER_ID}`);
-      summary = await r.json();
-    } catch(e) {}
-    const pct = summary.total_spent > 0 ? Math.min(Math.round(summary.total_spent / (summary.total_spent + Math.max(summary.balance, 0)) * 100), 100) : 0;
-    const over = summary.balance < 0;
+  for (const { name, data: summary } of summaries) {
+    const over     = summary.balance < 0;
+    const profit   = summary.balance;
+    const spent    = summary.total_spent;
+    const received = summary.total_client;
+    const safeName = name.replace(/'/g, "\\'");
+
     html += `
-    <div class="project-card">
-      <div class="project-card-body" onclick="openProject('${p.name.replace(/'/g, "\\'")}')">
+    <div class="project-card card-animate">
+      <div class="project-card-body" onclick="openProject('${safeName}')">
+
         <div class="project-card-header">
-          <div class="project-name">${p.name}</div>
-          <span class="badge ${over ? 'badge-red' : 'badge-green'}">${over ? '🟥 Перерасход' : '🟩 В бюджете'}</span>
+          <div class="project-name">${name}</div>
+          <span class="badge ${over ? 'badge-danger' : 'badge-success'}">
+            ${over ? 'Перерасход' : 'В бюджете'}
+          </span>
         </div>
-        <div class="project-stats">
-          <div><div class="project-stat-label">Потрачено</div><div class="project-stat-value">${fmt(summary.total_spent)}</div></div>
-          <div><div class="project-stat-label">От клиента</div><div class="project-stat-value" style="color:var(--green)">${fmt(summary.total_client)}</div></div>
-          <div><div class="project-stat-label">Баланс</div><div class="project-stat-value" style="color:${summary.balance >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(summary.balance))}</div></div>
+
+        <div class="project-main-metric">
+          <div class="project-main-amount ${over ? 'negative' : 'positive'}">
+            ${over ? '−' : '+'}${fmtShort(Math.abs(profit))}
+          </div>
+          <div class="project-main-label">${over ? 'Перерасход' : 'Текущая прибыль'}</div>
         </div>
-        <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%;background:${over ? 'var(--red)' : 'var(--accent)'}"></div></div>
-        <div style="color:var(--muted);font-size:11px;margin-top:4px;">${pct}% использовано</div>
+
+        <div class="project-sub-metrics">
+          <div class="project-sub-item">
+            <div class="project-sub-label">Получено</div>
+            <div class="project-sub-value">${fmtShort(received)}</div>
+          </div>
+          <div class="project-sub-item">
+            <div class="project-sub-label">Потрачено</div>
+            <div class="project-sub-value">${fmtShort(spent)}</div>
+          </div>
+        </div>
+
       </div>
+
       <div class="project-actions">
-        ${currentTab === 'active'
-          ? `<button class="project-action-btn" style="color:var(--accent)" onclick="openProject('${p.name.replace(/'/g, "\\'")}')">➕ Добавить</button>
-             <button class="project-action-btn" style="color:var(--muted);border-left:1px solid var(--border)" onclick="archiveProject('${p.name.replace(/'/g, "\\'")}')">📦 В архив</button>`
-          : `<button class="project-action-btn" style="color:var(--green);border-right:1px solid var(--border)" onclick="restoreProject('${p.name.replace(/'/g, "\\'")}')">↩️ Восстановить</button>
-             <button class="project-action-btn" style="color:var(--red)" onclick="showDeleteModal('${p.name.replace(/'/g, "\\'")}')">🗑 Удалить</button>`
-        }
+        ${currentTab === 'active' ? `
+          <button class="project-action-btn" style="color:var(--primary)"
+            onclick="openProject('${safeName}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Добавить
+          </button>
+          <button class="project-action-btn" style="color:var(--muted);border-left:1px solid var(--border)"
+            onclick="archiveProject('${safeName}')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+            В архив
+          </button>
+        ` : `
+          <button class="project-action-btn" style="color:var(--success);border-right:1px solid var(--border)"
+            onclick="restoreProject('${safeName}')">
+            ↩ Восстановить
+          </button>
+          <button class="project-action-btn" style="color:var(--danger)"
+            onclick="showDeleteModal('${safeName}')">
+            Удалить
+          </button>
+        `}
       </div>
     </div>`;
   }
@@ -386,7 +755,7 @@ async function renderProjects(projects) {
 
 function switchTab(tab) {
   currentTab = tab;
-  document.getElementById('tab-active').className = tab === 'active' ? 'tab active' : 'tab inactive';
+  document.getElementById('tab-active').className   = tab === 'active'   ? 'tab active' : 'tab inactive';
   document.getElementById('tab-archived').className = tab === 'archived' ? 'tab active' : 'tab inactive';
   loadProjects();
 }
@@ -399,69 +768,123 @@ function openProject(name) {
 }
 
 // ─── ДАШБОРД ────────────────────────────────────────────
-
 async function loadDashboard() {
   const content = document.getElementById('dash-content');
-  content.innerHTML = '<div class="loading">Загрузка...</div>';
+  content.innerHTML = skeletonDashboard();
   profitVisible = false;
+
   try {
     const res = await fetch(`${API}/api/projects/${encodeURIComponent(currentProject)}/summary?user_id=${USER_ID}`);
     const s = await res.json();
-    const over = s.balance < 0;
-    const badge = document.getElementById('dash-status-badge');
-    badge.textContent = over ? '🟥 Перерасход' : '🟩 В бюджете';
-    badge.className = `badge ${over ? 'badge-red' : 'badge-green'}`;
-    const spent = s.total_spent;
+    const over   = s.balance < 0;
+    const spent  = s.total_spent;
     const received = s.total_client;
     const profit = s.balance;
-    const pct = spent > 0 ? Math.min(Math.round(spent / (spent + Math.max(profit, 1)) * 100), 100) : 0;
-    const barColor = over ? 'var(--red)' : pct > 80 ? '#B8860B' : 'var(--accent)';
+
+    const badge = document.getElementById('dash-status-badge');
+    badge.textContent = over ? 'Перерасход' : 'В бюджете';
+    badge.className = `badge ${over ? 'badge-danger' : 'badge-success'}`;
+
+    // Категории расходов
     let catsHtml = '';
     for (const [cat, amount] of Object.entries(s.categories || {})) {
-      const info = CAT[cat] || { emoji: '📌', label: cat, color: '#888' };
+      const info   = CAT[cat] || { label: cat, color: '#888' };
       const barPct = spent > 0 ? Math.round(amount / spent * 100) : 0;
-      catsHtml += `<div class="cat-row"><div class="cat-row-header"><span class="cat-row-name">${info.emoji} ${info.label}</span><span class="cat-row-amount">${fmt(amount)}</span></div><div class="cat-bar-bg"><div class="cat-bar-fill" style="width:${barPct}%;background:${info.color}"></div></div></div>`;
+      catsHtml += `
+        <div class="cat-row">
+          <div class="cat-row-header">
+            <span class="cat-row-name">${info.label}</span>
+            <span class="cat-row-amount">${fmtShort(amount)}</span>
+          </div>
+          <div class="cat-bar-bg">
+            <div class="cat-bar-fill" style="width:${barPct}%;background:${info.color}"></div>
+          </div>
+        </div>`;
     }
+
+    // Последние транзакции
     const txRes = await fetch(`${API}/api/transactions?user_id=${USER_ID}&project_name=${encodeURIComponent(currentProject)}`);
     const txs = await txRes.json();
     allTransactions = txs;
     let recentHtml = '';
     for (const t of txs.slice(0, 4)) {
-      const info = CAT[t.category] || { emoji: '📌', label: t.category, color: '#888' };
+      const info = CAT[t.category] || { label: t.category, color: '#888' };
       const isIncome = t.category === 'client';
-      recentHtml += `<div class="tx-item"><div class="tx-icon" style="background:${info.color}18">${info.emoji}</div><div class="tx-info"><div class="tx-name">${t.item_name || t.target_name || '—'}</div><div class="tx-meta">${t.date} · ${info.label}</div></div><div class="tx-amount" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</div></div>`;
+      const name = t.target_name || t.item_name || '—';
+      recentHtml += `
+        <div class="tx-item">
+          <div class="tx-icon" style="background:${info.color}15">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${info.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              ${isIncome
+                ? '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'
+                : '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'}
+            </svg>
+          </div>
+          <div class="tx-info">
+            <div class="tx-name">${name}</div>
+            <div class="tx-meta">${t.date} · ${info.label}</div>
+          </div>
+          <div class="tx-amount" style="color:${isIncome ? 'var(--success)' : 'var(--ink)'}">
+            ${isIncome ? '+' : '−'}${fmtShort(t.amount)}
+          </div>
+        </div>`;
     }
+
     content.innerHTML = `
-      <div class="card">
-        <div class="grid-3">
-          <div class="metric"><div class="metric-label">Потрачено</div><div class="metric-value">${fmt(spent)}</div></div>
-          <div class="metric"><div class="metric-label">От клиента</div><div class="metric-value" style="color:var(--green)">${fmt(received)}</div></div>
-          <div class="metric"><div class="metric-label">Баланс</div><div class="metric-value" style="color:${profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(Math.abs(profit))}</div></div>
+      <!-- Главная метрика: остаток (баланс) -->
+      <div class="dash-hero card-animate">
+        <div class="dash-hero-label">Остаток средств</div>
+        <div class="dash-hero-amount ${over ? 'negative' : 'positive'}">
+          ${over ? '−' : ''}${fmt(Math.abs(profit))}
         </div>
-        <div class="progress-wrap">
-          <div class="progress-bar-bg"><div class="progress-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
-          <div class="progress-labels"><span>0%</span><span style="font-weight:600">${pct}%</span><span>100%</span></div>
+        <div class="dash-sub-grid">
+          <div class="dash-sub-item">
+            <div class="dash-sub-label">Получено</div>
+            <div class="dash-sub-value" style="color:var(--success)">${fmtShort(received)}</div>
+          </div>
+          <div class="dash-sub-item">
+            <div class="dash-sub-label">Потрачено</div>
+            <div class="dash-sub-value">${fmtShort(spent)}</div>
+          </div>
+          <div class="dash-sub-item">
+            <div class="dash-sub-label">Статус</div>
+            <div class="dash-sub-value" style="color:${over ? 'var(--danger)' : 'var(--success)'}">${over ? 'Минус' : 'Плюс'}</div>
+          </div>
         </div>
       </div>
-      <div class="profit-block">
-        <div class="profit-label">🏦 Моя прибыль</div>
+
+      <!-- Моя прибыль (скрытая) -->
+      <div class="profit-block card-animate">
+        <div class="profit-label">Моя прибыль</div>
         <div class="profit-row">
-          <div id="profit-display"><div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div></div>
-          <button class="eye-btn" onclick="toggleProfit(${s.my_profit || 0})">👁</button>
+          <div id="profit-display">
+            <div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div>
+          </div>
+          <button class="eye-btn" onclick="toggleProfit(${s.my_profit || 0})">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
         </div>
       </div>
+
+      <!-- Расходы по категориям -->
       ${catsHtml ? `<div class="card"><div class="card-title">Расходы по категориям</div>${catsHtml}</div>` : ''}
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+
+      <!-- Последние записи -->
+      <div class="card card-animate">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
           <div class="card-title" style="margin:0">Последние записи</div>
-          <button style="background:none;border:none;color:var(--accent);font-size:12px;font-weight:700;cursor:pointer" onclick="showScreen('screen-list');loadTransactions()">Все →</button>
+          <button style="background:none;border:none;color:var(--primary);font-size:12px;font-weight:700;cursor:pointer"
+            onclick="showScreen('screen-list');loadTransactions()">Все →</button>
         </div>
         ${recentHtml || '<div class="empty">Нет записей</div>'}
       </div>
-      <div class="grid-2">
-        <button class="btn btn-accent" onclick="showAddModal()">+ Добавить</button>
-        <button class="btn btn-outline" onclick="showReport()">📄 Отчёт</button>
+
+      <!-- Кнопки -->
+      <div class="grid-2" style="gap:10px;">
+        <button class="btn btn-primary" onclick="showAddModal()">+ Добавить</button>
+        <button class="btn btn-outline" onclick="showReport()">Отчёт</button>
       </div>`;
+
   } catch(e) {
     content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки данных</div>';
   }
@@ -478,10 +901,18 @@ function toggleProfit(amount) {
 }
 
 // ─── ТРАНЗАКЦИИ ─────────────────────────────────────────
-
 async function loadTransactions() {
   const list = document.getElementById('tx-list');
-  list.innerHTML = '<div class="loading">Загрузка...</div>';
+  list.innerHTML = `<div class="skeleton-card">${[1,2,3,4].map(() => `
+    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">
+      <div class="skeleton" style="width:36px;height:36px;border-radius:10px;flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div class="skeleton sk-line" style="width:60%;margin-bottom:6px;"></div>
+        <div class="skeleton sk-line" style="width:35%;height:10px;"></div>
+      </div>
+      <div class="skeleton sk-line" style="width:22%;"></div>
+    </div>`).join('')}
+  </div>`;
   try {
     const res = await fetch(`${API}/api/transactions?user_id=${USER_ID}&project_name=${encodeURIComponent(currentProject)}`);
     allTransactions = await res.json();
@@ -496,10 +927,26 @@ function renderTransactions(txs) {
   if (!txs.length) { list.innerHTML = '<div class="empty">Нет записей</div>'; return; }
   let html = '<div class="card">';
   for (const t of txs) {
-    const info = CAT[t.category] || { emoji: '📌', label: t.category, color: '#888' };
+    const info = CAT[t.category] || { label: t.category, color: '#888' };
     const isIncome = t.category === 'client';
     const name = t.target_name || t.item_name || '—';
-    html += `<div class="tx-item"><div class="tx-icon" style="background:${info.color}18">${info.emoji}</div><div class="tx-info"><div class="tx-name">${name}</div><div class="tx-meta">${t.date} · ${info.label}</div></div><div class="tx-amount" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(t.amount)}</div></div>`;
+    html += `
+      <div class="tx-item">
+        <div class="tx-icon" style="background:${info.color}15">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${info.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            ${isIncome
+              ? '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'
+              : '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'}
+          </svg>
+        </div>
+        <div class="tx-info">
+          <div class="tx-name">${name}</div>
+          <div class="tx-meta">${t.date} · ${info.label}</div>
+        </div>
+        <div class="tx-amount" style="color:${isIncome ? 'var(--success)' : 'var(--ink)'}">
+          ${isIncome ? '+' : '−'}${fmtShort(t.amount)}
+        </div>
+      </div>`;
   }
   html += '</div>';
   list.innerHTML = html;
@@ -512,8 +959,7 @@ function filterTx(cat, btn) {
   renderTransactions(filtered);
 }
 
-// ─── ФОРМА: ДОБАВИТЬ РАСХОД ──────────────────────────────
-
+// ─── ДОБАВИТЬ ЗАПИСЬ ────────────────────────────────────
 function showAddModal() {
   selectedCat = '';
   document.getElementById('add-item-name').value = '';
@@ -531,11 +977,11 @@ function selectCat(el) {
 
 async function saveTransaction() {
   const itemName = document.getElementById('add-item-name').value.trim();
-  const amount = parseFloat(document.getElementById('add-amount').value);
-  const target = document.getElementById('add-target').value.trim();
+  const amount   = parseFloat(document.getElementById('add-amount').value);
+  const target   = document.getElementById('add-target').value.trim();
 
   if (!selectedCat) { alert('Выбери категорию'); return; }
-  if (!itemName) { alert('Введи название'); return; }
+  if (!itemName)    { alert('Введи название'); return; }
   if (!amount || amount <= 0) { alert('Введи сумму'); return; }
 
   try {
@@ -563,8 +1009,7 @@ async function saveTransaction() {
   }
 }
 
-// ─── ФОРМА: НОВЫЙ ОБЪЕКТ ─────────────────────────────────
-
+// ─── НОВЫЙ ОБЪЕКТ ────────────────────────────────────────
 function showNewProjectModal() {
   document.getElementById('new-project-name').value = '';
   document.getElementById('modal-new-project').classList.remove('hidden');
@@ -573,7 +1018,6 @@ function showNewProjectModal() {
 async function createProject() {
   const name = document.getElementById('new-project-name').value.trim();
   if (!name) { alert('Введи название объекта'); return; }
-
   try {
     const res = await fetch(`${API}/api/projects/create`, {
       method: 'POST',
@@ -593,12 +1037,16 @@ async function createProject() {
 }
 
 // ─── ОТЧЁТ ───────────────────────────────────────────────
-
 async function showReport() {
   showScreen('screen-report');
   document.getElementById('report-project-name').textContent = currentProject;
   const content = document.getElementById('report-content');
-  content.innerHTML = '<div class="loading">Загрузка...</div>';
+  content.innerHTML = `<div class="skeleton-card" style="height:80px;margin-bottom:12px;"></div>
+    <div class="skeleton-card">
+      <div class="skeleton sk-line sk-sub" style="margin-bottom:14px;"></div>
+      ${[1,2,3,4].map(() => `<div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);"><div class="skeleton sk-line" style="width:45%;"></div><div class="skeleton sk-line" style="width:30%;"></div></div>`).join('')}
+    </div>
+    <div class="skeleton-card" style="height:70px;margin-top:12px;"></div>`;
 
   try {
     const res = await fetch(`${API}/api/projects/${encodeURIComponent(currentProject)}/summary?user_id=${USER_ID}`);
@@ -607,45 +1055,55 @@ async function showReport() {
 
     let catsHtml = '';
     for (const [cat, amount] of Object.entries(s.categories || {})) {
-      const info = CAT[cat] || { emoji: '📌', label: cat, color: '#888' };
+      const info = CAT[cat] || { label: cat, color: '#888' };
       const isIncome = cat === 'client';
       catsHtml += `
         <div class="report-row">
-          <span class="report-label">${info.emoji} ${info.label}</span>
-          <span class="report-value" style="color:${isIncome ? 'var(--green)' : 'var(--ink)'}">${isIncome ? '+' : '−'}${fmt(amount)}</span>
+          <span class="report-label">${info.label}</span>
+          <span class="report-value" style="color:${isIncome ? 'var(--success)' : 'var(--ink)'}">
+            ${isIncome ? '+' : '−'}${fmt(amount)}
+          </span>
         </div>`;
     }
 
     content.innerHTML = `
       <div class="report-total">
-        <span class="report-total-label">💰 От клиента получено</span>
+        <span class="report-total-label">От клиента получено</span>
         <span class="report-total-value">+${fmt(s.total_client)}</span>
       </div>
+
       <div class="card">
         <div class="card-title">Расходы по категориям</div>
         ${catsHtml || '<div class="empty">Нет расходов</div>'}
-        <div style="border-top:2px solid var(--border);margin-top:8px;padding-top:12px;display:flex;justify-content:space-between;">
-          <span style="font-weight:700;font-size:14px;">Итого расходов</span>
-          <span style="font-weight:900;font-size:15px;color:var(--red)">−${fmt(s.total_spent)}</span>
+        <div style="border-top:2px solid var(--border);margin-top:10px;padding-top:12px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-weight:700;font-size:14px;color:var(--ink)">Итого расходов</span>
+          <span style="font-weight:800;font-size:15px;color:var(--muted)">−${fmt(s.total_spent)}</span>
         </div>
       </div>
-      <div class="card" style="background:${over ? 'var(--red-bg)' : 'var(--green-bg)'};border-color:${over ? 'rgba(192,57,43,0.2)' : 'rgba(26,122,74,0.2)'}">
+
+      <div class="card" style="background:${over ? 'var(--danger-bg)' : 'var(--success-bg)'};border-color:${over ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}">
         <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-weight:700;font-size:15px;color:${over ? 'var(--red)' : 'var(--green)'}">
-            ${over ? '🟥 Перерасход' : '🟩 Прибыль объекта'}
+          <span style="font-weight:700;font-size:15px;color:${over ? 'var(--danger)' : 'var(--success)'}">
+            ${over ? 'Перерасход' : 'Прибыль объекта'}
           </span>
-          <span style="font-weight:900;font-size:20px;color:${over ? 'var(--red)' : 'var(--green)'}">
+          <span style="font-weight:800;font-size:22px;color:${over ? 'var(--danger)' : 'var(--success)'};letter-spacing:-0.5px">
             ${over ? '−' : '+'}${fmt(Math.abs(s.balance))}
           </span>
         </div>
       </div>
+
       <div class="profit-block">
-        <div class="profit-label">🏦 Моя личная прибыль</div>
+        <div class="profit-label">Моя личная прибыль</div>
         <div class="profit-row">
-          <div id="report-profit-display"><div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div></div>
-          <button class="eye-btn" onclick="toggleReportProfit(${s.my_profit || 0})">👁</button>
+          <div id="report-profit-display">
+            <div class="profit-dots">${[1,2,3,4,5,6,7,8].map(() => '<div class="profit-dot"></div>').join('')}</div>
+          </div>
+          <button class="eye-btn" onclick="toggleReportProfit(${s.my_profit || 0})">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
         </div>
       </div>`;
+
   } catch(e) {
     content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки отчёта</div>';
   }
@@ -663,14 +1121,19 @@ function toggleReportProfit(amount) {
 }
 
 // ─── АРХИВ / УДАЛИТЬ ─────────────────────────────────────
-
 async function archiveProject(name) {
-  await fetch(`${API}/api/projects/archive`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: name }) });
+  await fetch(`${API}/api/projects/archive`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user_id: USER_ID, project_name: name })
+  });
   loadProjects();
 }
 
 async function restoreProject(name) {
-  await fetch(`${API}/api/projects/restore`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: name }) });
+  await fetch(`${API}/api/projects/restore`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user_id: USER_ID, project_name: name })
+  });
   loadProjects();
 }
 
@@ -688,7 +1151,7 @@ function checkDeleteInput() {
   document.getElementById('delete-input').value = val;
   const btn = document.getElementById('delete-confirm-btn');
   if (val === 'УДАЛИТЬ') {
-    btn.disabled = false; btn.style.background = 'var(--red)'; btn.style.color = '#fff';
+    btn.disabled = false; btn.style.background = 'var(--danger)'; btn.style.color = '#fff';
     document.getElementById('delete-input').classList.add('valid');
   } else {
     btn.disabled = true; btn.style.background = 'var(--border)'; btn.style.color = 'var(--muted)';
@@ -697,7 +1160,10 @@ function checkDeleteInput() {
 }
 
 async function confirmDelete() {
-  await fetch(`${API}/api/projects/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ user_id: USER_ID, project_name: deleteProjectName }) });
+  await fetch(`${API}/api/projects/delete`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user_id: USER_ID, project_name: deleteProjectName })
+  });
   closeModal('modal-delete');
   loadProjects();
 }
