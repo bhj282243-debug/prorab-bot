@@ -112,18 +112,22 @@ def set_menu_button(chat_id=None):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     chat_id = message.chat.id
-    try:
-        bot.delete_message(chat_id, message.message_id)
-    except Exception:
-        pass
 
-    # Устанавливаем постоянную кнопку меню для этого пользователя
+    # Устанавливаем постоянную кнопку меню
     set_menu_button(chat_id)
+
+    # Inline кнопка для открытия Mini App
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(
+        text="📊 Открыть Прораб-ERP",
+        web_app=types.WebAppInfo(url=WEBAPP_URL)
+    ))
 
     bot.send_message(
         chat_id,
-        "🏗 *Прораб-ERP*\n\nОткройте приложение через кнопку меню.",
-        parse_mode="Markdown"
+        "🏗 *Прораб-ERP*\n\nНажмите кнопку чтобы открыть приложение:",
+        parse_mode="Markdown",
+        reply_markup=markup
     )
 
 # --- ГОЛОСОВЫЕ СООБЩЕНИЯ ---
