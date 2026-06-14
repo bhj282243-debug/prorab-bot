@@ -335,7 +335,22 @@
   .project-action-btn:active { opacity: 0.6; }
   .nav-btn:active         { opacity: 0.6; }
   .cat-chip               { transition: all 0.15s ease; }
-  .filter-btn             { transition: all 0.15s ease; }
+  /* ── ADMIN STATS ── */
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 12px; padding: 16px;
+  }
+  .stat-card {
+    background: var(--surface); border-radius: 16px;
+    border: 1px solid var(--border); padding: 18px 16px;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.04);
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-card:first-child { grid-column: 1 / -1; }
+  .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat-value { font-size: 32px; font-weight: 800; color: var(--ink); letter-spacing: -0.5px; line-height: 1; }
+  .stat-card:first-child .stat-value { color: var(--primary); }
+  .stat-online { color: var(--success) !important; }
 </style>
 </head>
 <body>
@@ -351,7 +366,10 @@
         <span class="topbar-brand-sub">Контроль финансов</span>
       </div>
     </div>
-    <button class="btn-sm" onclick="showNewProjectModal()">+ Новый</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-sm" style="background:var(--surface);color:var(--muted);border:1px solid var(--border);font-size:16px;padding:7px 10px" onclick="showScreen('screen-admin'); loadAdminStats()" title="Аналитика">📊</button>
+      <button class="btn-sm" onclick="showNewProjectModal()">+ Новый</button>
+    </div>
   </div>
   <div class="content">
     <div class="tabs">
@@ -542,6 +560,28 @@ let deleteProjectName = '';
 let selectedCat = '';
 let profitVisible = false;
 
+// ─── ADMIN STATS ─────────────────────────────────────────
+async function loadAdminStats() {
+  // Показываем "загрузка"
+  ['stat-users','stat-active','stat-online','stat-projects','stat-calc'].forEach(id => {
+    document.getElementById(id).innerText = '…';
+  });
+  try {
+    const res = await fetch(`${API}/api/admin/stats`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    document.getElementById('stat-users').innerText    = data.total_users ?? '—';
+    document.getElementById('stat-active').innerText   = data.active_30d  ?? '—';
+    document.getElementById('stat-online').innerText   = data.online_now  ?? '—';
+    document.getElementById('stat-projects').innerText = data.total_projects ?? '—';
+    document.getElementById('stat-calc').innerText     = data.total_calculations ?? '—';
+  } catch (e) {
+    ['stat-users','stat-active','stat-online','stat-projects','stat-calc'].forEach(id => {
+      document.getElementById(id).innerText = '!';
+    });
+  }
+}
+
 const CAT = {
   material:   { label: 'Материалы',      color: '#2563EB' },
   worker:     { label: 'Рабочие',        color: '#0891B2' },
@@ -623,6 +663,12 @@ window.addEventListener('load', () => {
     USER_ID = Telegram.WebApp.initDataUnsafe?.user?.id || 0;
   }
   if (!USER_ID) USER_ID = 123456;
+  // Регистрируем пользователя и обновляем last_seen
+  fetch(`${API}/api/user/ping`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user_id: USER_ID })
+  }).catch(() => {}); // тихо игнорируем ошибки — не блокируем загрузку
   loadProjects();
 });
 
@@ -1522,6 +1568,41 @@ async function confirmDelete() {
   </div>
   <div class="content" id="calculations-list">
     <div class="empty">Загрузка...</div>
+  </div>
+</div>
+
+<!-- ─── ЭКРАН: АНАЛИТИКА (ADMIN) ─────────────────────────── -->
+<div id="screen-admin" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showScreen('screen-projects')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>📊 SaaS Analytics</h1>
+    </div>
+    <button class="btn-sm" style="background:var(--primary-bg);color:var(--primary);border:1px solid rgba(30,64,175,0.2)" onclick="loadAdminStats()">↻ Обновить</button>
+  </div>
+  <div class="stats-grid" id="admin-stats-grid">
+    <div class="stat-card" style="grid-column:1/-1">
+      <div class="stat-label">👥 Всего пользователей</div>
+      <div class="stat-value" id="stat-users">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📅 Активных за 30д</div>
+      <div class="stat-value" id="stat-active">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🟢 Онлайн сейчас</div>
+      <div class="stat-value stat-online" id="stat-online">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🏗️ Объектов всего</div>
+      <div class="stat-value" id="stat-projects">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🧮 Расчётов всего</div>
+      <div class="stat-value" id="stat-calc">—</div>
+    </div>
   </div>
 </div>
 

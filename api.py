@@ -465,6 +465,67 @@ def delete_calculation(req: DeleteCalculationRequest):
         put_conn(conn)
 
 
+# POST /api/user/ping — регистрация и обновление last_seen при открытии Mini App
+class UserPingRequest(BaseModel):
+    user_id: int
+
+@app.post("/api/user/ping")
+def user_ping(req: UserPingRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO users (user_id, first_seen, last_seen)
+            VALUES (%s, NOW(), NOW())
+            ON CONFLICT (user_id) DO UPDATE SET last_seen = NOW()
+            """,
+            (req.user_id,)
+        )
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/admin/stats — SaaS аналитика
+@app.get("/api/admin/stats")
+def get_admin_stats():
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM users")
+        total_users = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM users WHERE last_seen > NOW() - INTERVAL '30 days'")
+        active_30d = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM users WHERE last_seen > NOW() - INTERVAL '5 minutes'")
+        online_now = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM projects")
+        total_projects = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM calculations")
+        total_calculations = cur.fetchone()[0]
+
+        return {
+            "total_users": total_users,
+            "active_30d": active_30d,
+            "online_now": online_now,
+            "total_projects": total_projects,
+            "total_calculations": total_calculations,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
 # GET /health
 @app.get("/health")
 def health():

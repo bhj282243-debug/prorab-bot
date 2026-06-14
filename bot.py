@@ -84,6 +84,14 @@ def init_db():
                 last_msg_id BIGINT
             )
         ''')
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                user_id    BIGINT PRIMARY KEY,
+                first_seen TIMESTAMP DEFAULT NOW(),
+                last_seen  TIMESTAMP DEFAULT NOW()
+            )
+        ''')
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_user_project ON transactions(user_id, project_name);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);")
         conn.commit()
