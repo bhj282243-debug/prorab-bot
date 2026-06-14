@@ -885,6 +885,7 @@ async function loadDashboard() {
         <button class="btn btn-outline" onclick="showReport()">Отчёт</button>
       </div>
       <button class="btn btn-outline" style="margin-top:8px;width:100%" onclick="openCalculations()">📐 Мои расчёты</button>
+      <button class="btn btn-outline" style="margin-top:8px;width:100%;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="openCalcMenu()">🧮 Калькулятор площадей</button>
     `;
 
   } catch(e) {
@@ -1122,6 +1123,172 @@ function toggleReportProfit(amount) {
   }
 }
 
+
+// ─── КАЛЬКУЛЯТОР ПЛОЩАДЕЙ ────────────────────────────────
+let windowCount = 0;
+let doorCount = 0;
+let lastCalcInput = null;
+let lastCalcResult = null;
+let lastCalcType = null;
+
+function openCalcMenu() {
+  showScreen('screen-calc');
+  switchCalcTab('wall');
+}
+
+function switchCalcTab(tab) {
+  ['wall','floor','ceiling'].forEach(t => {
+    document.getElementById('calc-' + t).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('ctab-' + t).className = t === tab ? 'tab active' : 'tab inactive';
+  });
+}
+
+function addWindow() {
+  windowCount++;
+  const id = 'win-' + windowCount;
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 24px;gap:8px;margin-bottom:8px;align-items:center';
+  div.innerHTML = `
+    <input type="number" placeholder="Ш (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <input type="number" placeholder="В (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px">×</button>
+  `;
+  document.getElementById('windows-list').appendChild(div);
+}
+
+function addDoor() {
+  doorCount++;
+  const id = 'door-' + doorCount;
+  const div = document.createElement('div');
+  div.id = id;
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 24px;gap:8px;margin-bottom:8px;align-items:center';
+  div.innerHTML = `
+    <input type="number" placeholder="Ш (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <input type="number" placeholder="В (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px">×</button>
+  `;
+  document.getElementById('doors-list').appendChild(div);
+}
+
+function calcWall() {
+  const l = parseFloat(document.getElementById('wall-length').value) || 0;
+  const h = parseFloat(document.getElementById('wall-height').value) || 0;
+  if (!l || !h) { alert('Введите длину и высоту стены'); return; }
+
+  let totalWall = l * h;
+  let deductions = 0;
+
+  // Окна
+  document.querySelectorAll('#windows-list > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const w = parseFloat(inputs[0].value) || 0;
+    const wh = parseFloat(inputs[1].value) || 0;
+    deductions += w * wh;
+  });
+
+  // Двери
+  document.querySelectorAll('#doors-list > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const w = parseFloat(inputs[0].value) || 0;
+    const wh = parseFloat(inputs[1].value) || 0;
+    deductions += w * wh;
+  });
+
+  const result = Math.max(0, totalWall - deductions);
+
+  // Собираем детальные данные окон и дверей
+  const windowsData = [];
+  document.querySelectorAll('#windows-list > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const w = parseFloat(inputs[0].value) || 0;
+    const wh = parseFloat(inputs[1].value) || 0;
+    if (w && wh) windowsData.push({ width: w, height: wh });
+  });
+  const doorsData = [];
+  document.querySelectorAll('#doors-list > div').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    const w = parseFloat(inputs[0].value) || 0;
+    const wh = parseFloat(inputs[1].value) || 0;
+    if (w && wh) doorsData.push({ width: w, height: wh });
+  });
+
+  lastCalcType = 'wall_area';
+  lastCalcInput = { length: l, height: h, windows: windowsData, doors: doorsData, total_deductions: Math.round(deductions * 100) / 100 };
+  lastCalcResult = { area_m2: Math.round(result * 100) / 100 };
+
+  const resDiv = document.getElementById('wall-result');
+  resDiv.style.display = 'block';
+  resDiv.style.background = 'var(--primary)';
+  resDiv.style.color = '#fff';
+  resDiv.style.padding = '16px';
+  resDiv.style.borderRadius = '12px';
+  document.getElementById('wall-result-value').textContent = result.toFixed(2) + ' м²';
+  document.getElementById('wall-result-detail').textContent = 
+    `Стена: ${totalWall.toFixed(2)} м² − Вычеты: ${deductions.toFixed(2)} м²`;
+  document.getElementById('wall-save-btn').style.display = 'block';
+}
+
+function calcFloor() {
+  const l = parseFloat(document.getElementById('floor-length').value) || 0;
+  const w = parseFloat(document.getElementById('floor-width').value) || 0;
+  if (!l || !w) { alert('Введите длину и ширину'); return; }
+  const result = l * w;
+
+  lastCalcType = 'floor_area';
+  lastCalcInput = { length: l, width: w };
+  lastCalcResult = { area_m2: Math.round(result * 100) / 100 };
+
+  const resDiv = document.getElementById('floor-result');
+  resDiv.style.display = 'block';
+  document.getElementById('floor-result-value').textContent = result.toFixed(2) + ' м²';
+  document.getElementById('floor-save-btn').style.display = 'block';
+}
+
+function calcCeiling() {
+  const l = parseFloat(document.getElementById('ceiling-length').value) || 0;
+  const w = parseFloat(document.getElementById('ceiling-width').value) || 0;
+  if (!l || !w) { alert('Введите длину и ширину'); return; }
+  const result = l * w;
+
+  lastCalcType = 'ceiling_area';
+  lastCalcInput = { length: l, width: w };
+  lastCalcResult = { area_m2: Math.round(result * 100) / 100 };
+
+  const resDiv = document.getElementById('ceiling-result');
+  resDiv.style.display = 'block';
+  document.getElementById('ceiling-result-value').textContent = result.toFixed(2) + ' м²';
+  document.getElementById('ceiling-save-btn').style.display = 'block';
+}
+
+async function saveCalc(type) {
+  const names = { wall: 'Площадь стены', floor: 'Площадь пола', ceiling: 'Площадь потолка' };
+  const name = prompt('Название расчёта (необязательно):', names[type] || type);
+  if (name === null) return;
+
+  try {
+    const res = await fetch(`${API}/api/calculations/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: USER_ID,
+        calc_type: lastCalcType,
+        calc_name: name || names[type],
+        project_id: null,
+        input_data: lastCalcInput,
+        result_data: lastCalcResult
+      })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert('✅ Расчёт сохранён!');
+      document.getElementById(type + '-save-btn').style.display = 'none';
+    }
+  } catch(e) {
+    alert('Ошибка сохранения');
+  }
+}
+
 // ─── РАСЧЁТЫ ─────────────────────────────────────────────
 function openCalculations() {
   showScreen('screen-calculations');
@@ -1215,6 +1382,118 @@ async function confirmDelete() {
   loadProjects();
 }
 </script>
+
+<!-- ─── ЭКРАН: КАЛЬКУЛЯТОР ПЛОЩАДЕЙ ─────────────────────── -->
+<div id="screen-calc" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showScreen('screen-dashboard')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>Калькулятор площадей</h1>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- Табы типов -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="ctab-wall" class="tab active" onclick="switchCalcTab('wall')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Стена</button>
+      <button id="ctab-floor" class="tab inactive" onclick="switchCalcTab('floor')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Пол</button>
+      <button id="ctab-ceiling" class="tab inactive" onclick="switchCalcTab('ceiling')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Потолок</button>
+    </div>
+
+    <!-- СТЕНА -->
+    <div id="calc-wall">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Размеры стены</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Длина (м)</div>
+            <input id="wall-length" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Высота (м)</div>
+            <input id="wall-height" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="card-title">Окна</div>
+          <button onclick="addWindow()" style="background:none;border:none;color:var(--primary);font-weight:700;cursor:pointer;font-size:14px">+ Добавить</button>
+        </div>
+        <div id="windows-list" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="card-title">Двери</div>
+          <button onclick="addDoor()" style="background:none;border:none;color:var(--primary);font-weight:700;cursor:pointer;font-size:14px">+ Добавить</button>
+        </div>
+        <div id="doors-list" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Результат стены -->
+      <div id="wall-result" style="display:none" class="card" style="margin-bottom:12px;background:var(--primary);color:#fff">
+        <div style="font-size:13px;opacity:0.8;margin-bottom:4px">Площадь стены</div>
+        <div id="wall-result-value" style="font-size:28px;font-weight:800"></div>
+        <div id="wall-result-detail" style="font-size:12px;opacity:0.7;margin-top:4px"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcWall()">Рассчитать</button>
+      <button id="wall-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('wall')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ПОЛ -->
+    <div id="calc-floor" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Размеры пола</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Длина (м)</div>
+            <input id="floor-length" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Ширина (м)</div>
+            <input id="floor-width" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+      <div id="floor-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Площадь пола</div>
+        <div id="floor-result-value" style="font-size:28px;font-weight:800;color:var(--primary)"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcFloor()">Рассчитать</button>
+      <button id="floor-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('floor')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ПОТОЛОК -->
+    <div id="calc-ceiling" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Размеры потолка</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Длина (м)</div>
+            <input id="ceiling-length" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Ширина (м)</div>
+            <input id="ceiling-width" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+      <div id="ceiling-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">Площадь потолка</div>
+        <div id="ceiling-result-value" style="font-size:28px;font-weight:800;color:var(--primary)"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcCeiling()">Рассчитать</button>
+      <button id="ceiling-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('ceiling')">💾 Сохранить расчёт</button>
+    </div>
+
+  </div>
+</div>
+
 <!-- ─── ЭКРАН: МОИ РАСЧЁТЫ ─────────────────────────── -->
 <div id="screen-calculations" class="screen">
   <div class="topbar">
