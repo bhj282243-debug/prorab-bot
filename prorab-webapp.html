@@ -883,7 +883,8 @@ async function loadDashboard() {
       <div class="grid-2" style="gap:10px;">
         <button class="btn btn-primary" onclick="showAddModal()">+ Добавить</button>
         <button class="btn btn-outline" onclick="showReport()">Отчёт</button>
-      </div>`;
+      </div>
+      <button class="btn btn-outline" style="margin-top:8px;width:100%" onclick="openCalculations()">📐 Мои расчёты</button>`;
 
   } catch(e) {
     content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки данных</div>';
@@ -1120,6 +1121,51 @@ function toggleReportProfit(amount) {
   }
 }
 
+// ─── РАСЧЁТЫ ─────────────────────────────────────────────
+function openCalculations() {
+  showScreen('screen-calculations');
+  loadCalculations();
+}
+
+async function loadCalculations() {
+  const list = document.getElementById('calculations-list');
+  list.innerHTML = '<div class="empty">Загрузка...</div>';
+  try {
+    const res = await fetch(`${API}/api/calculations?user_id=${USER_ID}`);
+    const data = await res.json();
+    if (!data.length) {
+      list.innerHTML = '<div class="empty">Расчётов пока нет</div>';
+      return;
+    }
+    list.innerHTML = data.map(c => `
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:700;font-size:15px;color:var(--ink)">${c.calc_name || c.calc_type}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">${c.date}</div>
+          </div>
+          <button onclick="deleteCalculation(${c.id})" style="background:none;border:none;cursor:pointer;color:var(--danger);font-size:20px;padding:4px">🗑</button>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">
+          ${Object.entries(c.result_data).map(([k,v]) => `<div>${k}: <b>${v}</b></div>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML = '<div class="empty">⚠️ Ошибка загрузки</div>';
+  }
+}
+
+async function deleteCalculation(id) {
+  if (!confirm('Удалить расчёт?')) return;
+  await fetch(`${API}/api/calculations/delete`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user_id: USER_ID, calculation_id: id })
+  });
+  loadCalculations();
+}
+
 // ─── АРХИВ / УДАЛИТЬ ─────────────────────────────────────
 async function archiveProject(name) {
   await fetch(`${API}/api/projects/archive`, {
@@ -1168,5 +1214,20 @@ async function confirmDelete() {
   loadProjects();
 }
 </script>
+<!-- ─── ЭКРАН: МОИ РАСЧЁТЫ ─────────────────────────── -->
+<div id="screen-calculations" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showScreen('screen-dashboard')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>Мои расчёты</h1>
+    </div>
+  </div>
+  <div class="content" id="calculations-list">
+    <div class="empty">Загрузка...</div>
+  </div>
+</div>
+
 </body>
 </html>
