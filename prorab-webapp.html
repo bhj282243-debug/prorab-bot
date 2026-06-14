@@ -1171,50 +1171,63 @@ function addDoor() {
   document.getElementById('doors-list').appendChild(div);
 }
 
-function calcWall() {
-  const l = parseFloat(document.getElementById('wall-length').value) || 0;
-  const h = parseFloat(document.getElementById('wall-height').value) || 0;
-  if (!l || !h) { alert('Введите длину и высоту стены'); return; }
+function addWallLength() {
+  const div = document.createElement('div');
+  div.className = 'wall-len-row';
+  div.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
+  div.innerHTML = `
+    <input type="number" placeholder="Длина (м)" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px">
+    <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:20px;padding:4px">×</button>
+  `;
+  document.getElementById('wall-lengths-list').appendChild(div);
+}
 
-  let totalWall = l * h;
+function calcWall() {
+  const h = parseFloat(document.getElementById('wall-height').value) || 0;
+  if (!h) { alert('Введите высоту потолка'); return; }
+
+  // Собираем все длины стен
+  const lengths = [];
+  document.querySelectorAll('#wall-lengths-list .wall-len-row input').forEach(inp => {
+    const v = parseFloat(inp.value) || 0;
+    if (v > 0) lengths.push(v);
+  });
+
+  if (!lengths.length) { alert('Добавьте хотя бы одну длину стены'); return; }
+
+  const totalLength = lengths.reduce((a, b) => a + b, 0);
+  let totalWall = totalLength * h;
   let deductions = 0;
 
   // Окна
-  document.querySelectorAll('#windows-list > div').forEach(row => {
-    const inputs = row.querySelectorAll('input');
-    const w = parseFloat(inputs[0].value) || 0;
-    const wh = parseFloat(inputs[1].value) || 0;
-    deductions += w * wh;
-  });
-
-  // Двери
-  document.querySelectorAll('#doors-list > div').forEach(row => {
-    const inputs = row.querySelectorAll('input');
-    const w = parseFloat(inputs[0].value) || 0;
-    const wh = parseFloat(inputs[1].value) || 0;
-    deductions += w * wh;
-  });
-
-  const result = Math.max(0, totalWall - deductions);
-
-  // Собираем детальные данные окон и дверей
   const windowsData = [];
   document.querySelectorAll('#windows-list > div').forEach(row => {
     const inputs = row.querySelectorAll('input');
     const w = parseFloat(inputs[0].value) || 0;
     const wh = parseFloat(inputs[1].value) || 0;
-    if (w && wh) windowsData.push({ width: w, height: wh });
+    if (w && wh) { deductions += w * wh; windowsData.push({ width: w, height: wh }); }
   });
+
+  // Двери
   const doorsData = [];
   document.querySelectorAll('#doors-list > div').forEach(row => {
     const inputs = row.querySelectorAll('input');
     const w = parseFloat(inputs[0].value) || 0;
     const wh = parseFloat(inputs[1].value) || 0;
-    if (w && wh) doorsData.push({ width: w, height: wh });
+    if (w && wh) { deductions += w * wh; doorsData.push({ width: w, height: wh }); }
   });
 
+  const result = Math.max(0, totalWall - deductions);
+
   lastCalcType = 'wall_area';
-  lastCalcInput = { length: l, height: h, windows: windowsData, doors: doorsData, total_deductions: Math.round(deductions * 100) / 100 };
+  lastCalcInput = {
+    wall_lengths: lengths,
+    total_length: Math.round(totalLength * 100) / 100,
+    height: h,
+    windows: windowsData,
+    doors: doorsData,
+    total_deductions: Math.round(deductions * 100) / 100
+  };
   lastCalcResult = { area_m2: Math.round(result * 100) / 100 };
 
   const resDiv = document.getElementById('wall-result');
@@ -1224,8 +1237,8 @@ function calcWall() {
   resDiv.style.padding = '16px';
   resDiv.style.borderRadius = '12px';
   document.getElementById('wall-result-value').textContent = result.toFixed(2) + ' м²';
-  document.getElementById('wall-result-detail').textContent = 
-    `Стена: ${totalWall.toFixed(2)} м² − Вычеты: ${deductions.toFixed(2)} м²`;
+  document.getElementById('wall-result-detail').textContent =
+    `Сумма стен: ${totalLength.toFixed(2)} м × ${h} м = ${totalWall.toFixed(2)} м² − вычеты: ${deductions.toFixed(2)} м²`;
   document.getElementById('wall-save-btn').style.display = 'block';
 }
 
@@ -1405,16 +1418,19 @@ async function confirmDelete() {
     <!-- СТЕНА -->
     <div id="calc-wall">
       <div class="card" style="margin-bottom:12px">
-        <div class="card-title">Размеры стены</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
-          <div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Длина (м)</div>
-            <input id="wall-length" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="card-title">Длины стен (м)</div>
+          <button onclick="addWallLength()" style="background:none;border:none;color:var(--primary);font-weight:700;cursor:pointer;font-size:14px">+ Добавить</button>
+        </div>
+        <div id="wall-lengths-list" style="margin-top:8px">
+          <div class="wall-len-row" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+            <input type="number" placeholder="Длина (м)" style="flex:1;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px">
+            <button onclick="this.parentElement.remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:20px;padding:4px">×</button>
           </div>
-          <div>
-            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Высота (м)</div>
-            <input id="wall-height" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
-          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Высота потолка (м)</div>
+          <input id="wall-height" type="number" placeholder="например 2.8" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
         </div>
       </div>
 
