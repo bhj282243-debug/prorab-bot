@@ -978,9 +978,9 @@ function renderTransactions(txs) {
   for (const t of txs) {
     const info = CAT[t.category] || { label: t.category, color: '#888' };
     const isIncome = t.category === 'client';
-    const name = t.target_name || t.item_name || '—';
+    const name = t.target_name ? `${t.item_name || '—'} → ${t.target_name}` : (t.item_name || '—');
     html += `
-      <div class="tx-item">
+      <div class="tx-item" id="tx-${t.id}">
         <div class="tx-icon" style="background:${info.color}15">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${info.color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             ${isIncome
@@ -992,13 +992,40 @@ function renderTransactions(txs) {
           <div class="tx-name">${name}</div>
           <div class="tx-meta">${t.date} · ${info.label}</div>
         </div>
-        <div class="tx-amount" style="color:${isIncome ? 'var(--success)' : 'var(--ink)'}">
-          ${isIncome ? '+' : '−'}${fmtShort(t.amount)}
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+          <div class="tx-amount" style="color:${isIncome ? 'var(--success)' : 'var(--ink)'}">
+            ${isIncome ? '+' : '−'}${fmtShort(t.amount)}
+          </div>
+          <button onclick="deleteTransaction(${t.id})"
+            style="background:none;border:none;cursor:pointer;padding:4px;color:var(--muted);font-size:16px;line-height:1;flex-shrink:0"
+            title="Удалить">🗑</button>
         </div>
       </div>`;
   }
   html += '</div>';
   list.innerHTML = html;
+}
+
+async function deleteTransaction(id) {
+  if (!confirm('Удалить эту запись?')) return;
+  try {
+    const res = await fetch(`${API}/api/transactions/delete`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ user_id: USER_ID, transaction_id: id })
+    });
+    if (res.ok) {
+      // Убираем строку из UI без перезагрузки
+      const el = document.getElementById(`tx-${id}`);
+      if (el) el.remove();
+      // Обновляем allTransactions
+      allTransactions = allTransactions.filter(t => t.id !== id);
+    } else {
+      alert('Ошибка удаления');
+    }
+  } catch(e) {
+    alert('Ошибка подключения');
+  }
 }
 
 function filterTx(cat, btn) {
@@ -1151,11 +1178,62 @@ async function showReport() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </button>
         </div>
-      </div>`;
+      </div>
+
+      <div id="report-detail-section"></div>`;
+
+    // Загружаем детализацию по транзакциям
+    loadReportDetail();
 
   } catch(e) {
     content.innerHTML = '<div class="empty">⚠️ Ошибка загрузки отчёта</div>';
   }
+}
+
+async function loadReportDetail() {
+  const section = document.getElementById('report-detail-section');
+  if (!section) return;
+  try {
+    const res = await fetch(`${API}/api/transactions?user_id=${USER_ID}&project_name=${encodeURIComponent(currentProject)}`);
+    const txs = await res.json();
+    if (!txs.length) return;
+
+    // Группируем по категориям для детализации
+    const groups = {};
+    for (const t of txs) {
+      if (!groups[t.category]) groups[t.category] = [];
+      groups[t.category].push(t);
+    }
+
+    let html = '';
+    const catOrder = ['worker','material','road','unexpected','client','profit'];
+    for (const cat of catOrder) {
+      if (!groups[cat]) continue;
+      const info = CAT[cat] || { label: cat, color: '#888' };
+      const isIncome = cat === 'client';
+      let rows = '';
+      for (const t of groups[cat]) {
+        const who = t.target_name ? ` → <b>${t.target_name}</b>` : '';
+        const what = t.item_name || '—';
+        rows += `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--ink)">${what}${who}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${t.date}</div>
+            </div>
+            <div style="font-weight:700;font-size:13px;color:${isIncome ? 'var(--success)' : 'var(--ink)'};flex-shrink:0;margin-left:12px">
+              ${isIncome ? '+' : '−'}${fmtShort(t.amount)}
+            </div>
+          </div>`;
+      }
+      html += `
+        <div class="card" style="margin-top:12px">
+          <div class="card-title" style="color:${info.color}">${info.label}</div>
+          ${rows}
+        </div>`;
+    }
+    section.innerHTML = html;
+  } catch(e) {}
 }
 
 let reportProfitVisible = false;
