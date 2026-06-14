@@ -329,11 +329,146 @@ def create_transaction(req: CreateTransactionRequest):
         put_conn(conn)
 
 
+# ─── КАЛЬКУЛЯТОРЫ ───────────────────────────────────────────
+
+# POST /api/calculations/save — сохранить расчёт
+class SaveCalculationRequest(BaseModel):
+    user_id: int
+    calc_type: str
+    calc_name: Optional[str] = None
+    project_id: Optional[int] = None
+    input_data: dict
+    result_data: dict
+
+@app.post("/api/calculations/save")
+def save_calculation(req: SaveCalculationRequest):
+    conn = get_conn()
+    try:
+        import json
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO calculations (user_id, calc_type, calc_name, project_id, input_data, result_data)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                req.user_id,
+                req.calc_type,
+                req.calc_name,
+                req.project_id,
+                json.dumps(req.input_data),
+                json.dumps(req.result_data),
+            )
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return {"ok": True, "id": new_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/calculations?user_id=123456 — список расчётов
+@app.get("/api/calculations")
+def get_calculations(user_id: int):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, calc_type, calc_name, project_id, result_data, created_at
+            FROM calculations
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            """,
+            (user_id,)
+        )
+        rows = cur.fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "id": r[0],
+                "calc_type": r[1],
+                "calc_name": r[2],
+                "project_id": r[3],
+                "result_data": r[4],
+                "date": format_date(r[5]),
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# GET /api/calculations/{calc_id}?user_id=123456 — один расчёт
+@app.get("/api/calculations/{calc_id}")
+def get_calculation(calc_id: int, user_id: int):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT id, calc_type, calc_name, project_id, input_data, result_data, created_at
+            FROM calculations
+            WHERE id = %s AND user_id = %s
+            """,
+            (calc_id, user_id)
+        )
+        r = cur.fetchone()
+        if not r:
+            raise HTTPException(status_code=404, detail="Расчёт не найден")
+        return {
+            "id": r[0],
+            "calc_type": r[1],
+            "calc_name": r[2],
+            "project_id": r[3],
+            "input_data": r[4],
+            "result_data": r[5],
+            "date": format_date(r[6]),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
+# POST /api/calculations/delete — удалить расчёт
+class DeleteCalculationRequest(BaseModel):
+    user_id: int
+    calculation_id: int
+
+@app.post("/api/calculations/delete")
+def delete_calculation(req: DeleteCalculationRequest):
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM calculations WHERE id = %s AND user_id = %s",
+            (req.calculation_id, req.user_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Расчёт не найден")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        put_conn(conn)
+
+
 # GET /health
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 
 # POST /webhook — приём обновлений от Telegram
