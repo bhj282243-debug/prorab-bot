@@ -932,6 +932,7 @@ async function loadDashboard() {
       </div>
       <button class="btn btn-outline" style="margin-top:8px;width:100%" onclick="openCalculations()">📐 Мои расчёты</button>
       <button class="btn btn-outline" style="margin-top:8px;width:100%;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="openCalcMenu()">🧮 Калькулятор площадей</button>
+      <button class="btn btn-outline" style="margin-top:8px;width:100%;background:var(--warning);color:#fff;border-color:var(--warning)" onclick="openMaterialsCalc()">🏗️ Калькулятор материалов</button>
     `;
 
   } catch(e) {
@@ -1272,10 +1273,11 @@ function addWindow() {
   const id = 'win-' + windowCount;
   const div = document.createElement('div');
   div.id = id;
-  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 24px;gap:8px;margin-bottom:8px;align-items:center';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 52px 24px;gap:6px;margin-bottom:8px;align-items:center';
   div.innerHTML = `
     <input type="number" placeholder="Ш (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
     <input type="number" placeholder="В (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <input type="number" placeholder="Кол" value="1" min="1" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;text-align:center">
     <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px">×</button>
   `;
   document.getElementById('windows-list').appendChild(div);
@@ -1286,10 +1288,11 @@ function addDoor() {
   const id = 'door-' + doorCount;
   const div = document.createElement('div');
   div.id = id;
-  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 24px;gap:8px;margin-bottom:8px;align-items:center';
+  div.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 52px 24px;gap:6px;margin-bottom:8px;align-items:center';
   div.innerHTML = `
     <input type="number" placeholder="Ш (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
     <input type="number" placeholder="В (м)" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px">
+    <input type="number" placeholder="Кол" value="1" min="1" style="padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;text-align:center">
     <button onclick="document.getElementById('${id}').remove()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px">×</button>
   `;
   document.getElementById('doors-list').appendChild(div);
@@ -1327,18 +1330,20 @@ function calcWall() {
   const windowsData = [];
   document.querySelectorAll('#windows-list > div').forEach(row => {
     const inputs = row.querySelectorAll('input');
-    const w = parseFloat(inputs[0].value) || 0;
+    const w  = parseFloat(inputs[0].value) || 0;
     const wh = parseFloat(inputs[1].value) || 0;
-    if (w && wh) { deductions += w * wh; windowsData.push({ width: w, height: wh }); }
+    const qty = parseFloat(inputs[2]?.value) || 1;
+    if (w && wh) { deductions += w * wh * qty; windowsData.push({ width: w, height: wh, qty }); }
   });
 
   // Двери
   const doorsData = [];
   document.querySelectorAll('#doors-list > div').forEach(row => {
     const inputs = row.querySelectorAll('input');
-    const w = parseFloat(inputs[0].value) || 0;
+    const w  = parseFloat(inputs[0].value) || 0;
     const wh = parseFloat(inputs[1].value) || 0;
-    if (w && wh) { deductions += w * wh; doorsData.push({ width: w, height: wh }); }
+    const qty = parseFloat(inputs[2]?.value) || 1;
+    if (w && wh) { deductions += w * wh * qty; doorsData.push({ width: w, height: wh, qty }); }
   });
 
   const result = Math.max(0, totalWall - deductions);
@@ -1399,7 +1404,7 @@ function calcCeiling() {
 }
 
 async function saveCalc(type) {
-  const names = { wall: 'Площадь стены', floor: 'Площадь пола', ceiling: 'Площадь потолка' };
+  const names = { wall: 'Площадь стены', floor: 'Площадь пола', ceiling: 'Площадь потолка', plaster: 'Штукатурка', putty: 'Шпаклёвка', paint: 'Краска', primer: 'Грунтовка', screed: 'Стяжка пола', self_level: 'Наливной пол', drywall: 'Гипсокартон' };
   const name = prompt('Название расчёта (необязательно):', names[type] || type);
   if (name === null) return;
 
@@ -1426,7 +1431,322 @@ async function saveCalc(type) {
   }
 }
 
-// ─── РАСЧЁТЫ ─────────────────────────────────────────────
+// ─── КАЛЬКУЛЯТОР МАТЕРИАЛОВ ──────────────────────────────
+function openMaterialsCalc() {
+  showScreen('screen-calc-materials');
+  switchMaterialTab('plaster');
+}
+
+function switchMaterialTab(tab) {
+  ['plaster','putty','paint','primer','screed','self_level','drywall'].forEach(t => {
+    document.getElementById('matcalc-' + t).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('mtab-' + t).className = t === tab ? 'tab active' : 'tab inactive';
+  });
+}
+
+// ── Штукатурка ───────────────────────────────────────────
+let plasterType = 'rotband'; // 'rotband' | 'cps'
+
+function setPlasterType(type) {
+  plasterType = type;
+  document.getElementById('ptype-rotband').className = type === 'rotband' ? 'tab active' : 'tab inactive';
+  document.getElementById('ptype-cps').className     = type === 'cps'     ? 'tab active' : 'tab inactive';
+  document.getElementById('plaster-result').style.display = 'none';
+  document.getElementById('plaster-save-btn').style.display = 'none';
+}
+
+function calcPlaster() {
+  const area  = parseFloat(document.getElementById('plaster-area').value)  || 0;
+  const thick = parseFloat(document.getElementById('plaster-thick').value) || 0;
+  if (!area)  { alert('Введите площадь стен'); return; }
+  if (!thick) { alert('Введите толщину слоя'); return; }
+
+  const resDiv = document.getElementById('plaster-result');
+  const resBody = document.getElementById('plaster-result-body');
+  resDiv.style.display = 'block';
+
+  if (plasterType === 'rotband') {
+    // 8.5 кг на 1 м² при толщине 10 мм
+    const totalKg  = area * (8.5 * thick / 10);
+    const bags30   = Math.ceil(totalKg / 30);
+    const totalTon = Math.round(totalKg / 100) / 10; // тонны, 1 знак
+
+    lastCalcType   = 'plaster_rotband';
+    lastCalcInput  = { area_m2: area, thickness_mm: thick, type: 'Ротбанд' };
+    lastCalcResult = { 'Расход смеси (кг)': Math.round(totalKg), 'Мешков по 30 кг': bags30, 'Общий вес (т)': totalTon };
+
+    resBody.innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="background:var(--primary-bg);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--primary)">${Math.round(totalKg)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">кг смеси</div>
+        </div>
+        <div style="background:var(--primary-bg);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--primary)">${bags30}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">мешков × 30 кг</div>
+        </div>
+      </div>
+      <div style="background:var(--primary);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-bottom:2px">Общий вес груза</div>
+        <div style="font-size:26px;font-weight:800;color:#fff">${totalTon} т</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">Ротбанд · ${area} м² · ${thick} мм · 8.5 кг/м²/10мм</div>`;
+
+  } else {
+    // ЦПС состав 1:3 (цемент:песок). Объём = площадь × толщина(м) × коэф.усадки 1.2
+    const thickM   = thick / 1000;
+    const vol      = Math.round(area * thickM * 1.2 * 100) / 100; // м³
+    // Цемент ~400 кг/м³ раствора (1 часть из 4 по массе)
+    const cementKg = Math.round(vol * 400);
+    const bags50   = Math.ceil(cementKg / 50);
+    const sandM3   = Math.round(vol * 0.75 * 100) / 100; // 3/4 объёма
+
+    lastCalcType   = 'plaster_cps';
+    lastCalcInput  = { area_m2: area, thickness_mm: thick, type: 'ЦПС' };
+    lastCalcResult = { 'Объём раствора (м³)': vol, 'Цемент (кг)': cementKg, 'Мешков цемента × 50 кг': bags50, 'Песок (м³)': sandM3 };
+
+    resBody.innerHTML = `
+      <div style="background:var(--warning);border-radius:10px;padding:12px;text-align:center;margin-bottom:10px">
+        <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:2px">Объём раствора</div>
+        <div style="font-size:26px;font-weight:800;color:#fff">${vol} м³</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div style="background:var(--warning-bg);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:var(--warning)">${cementKg}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">кг цемента</div>
+        </div>
+        <div style="background:var(--warning-bg);border-radius:10px;padding:12px;text-align:center">
+          <div style="font-size:20px;font-weight:800;color:var(--warning)">${bags50}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">мешков × 50 кг</div>
+        </div>
+      </div>
+      <div style="background:var(--warning-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:20px;font-weight:800;color:var(--warning)">${sandM3}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">м³ песка</div>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:8px">ЦПС 1:3 · ${area} м² · ${thick} мм · усадка ×1.2</div>`;
+  }
+
+  document.getElementById('plaster-save-btn').style.display = 'block';
+}
+
+// ── Шпаклёвка ────────────────────────────────────────────
+let puttyType = 'start'; // 'start' | 'finish'
+
+function setPuttyType(type) {
+  puttyType = type;
+  document.getElementById('putype-start').className  = type === 'start'  ? 'tab active' : 'tab inactive';
+  document.getElementById('putype-finish').className = type === 'finish' ? 'tab active' : 'tab inactive';
+  document.getElementById('putty-result').style.display = 'none';
+  document.getElementById('putty-save-btn').style.display = 'none';
+}
+
+function calcPutty() {
+  const area   = parseFloat(document.getElementById('putty-area').value)   || 0;
+  const layers = parseFloat(document.getElementById('putty-layers').value) || 0;
+  if (!area)   { alert('Введите площадь'); return; }
+  if (!layers) { alert('Введите количество слоёв'); return; }
+
+  // Нормы: стартовая 1.2 кг/м²/слой, финишная 1.0 кг/м²/слой
+  const rate    = puttyType === 'start' ? 1.2 : 1.0;
+  const totalKg = area * layers * rate;
+  const bags20  = Math.ceil(totalKg / 20);
+  const typeName = puttyType === 'start' ? 'Стартовая' : 'Финишная';
+
+  lastCalcType   = 'putty_' + puttyType;
+  lastCalcInput  = { area_m2: area, layers, type: typeName, rate_per_m2: rate };
+  lastCalcResult = { 'Расход (кг)': Math.round(totalKg * 10) / 10, 'Мешков по 20 кг': bags20 };
+
+  const resDiv  = document.getElementById('putty-result');
+  const resBody = document.getElementById('putty-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="background:var(--success-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--success)">${Math.round(totalKg*10)/10}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">кг шпаклёвки</div>
+      </div>
+      <div style="background:var(--success-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--success)">${bags20}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">мешков × 20 кг</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${typeName} · ${area} м² · ${layers} сл. · ${rate} кг/м²/сл.</div>`;
+
+  document.getElementById('putty-save-btn').style.display = 'block';
+}
+
+// ── Краска ───────────────────────────────────────────────
+function calcPaint() {
+  const area   = parseFloat(document.getElementById('paint-area').value)   || 0;
+  const layers = parseFloat(document.getElementById('paint-layers').value) || 0;
+  const rate   = parseFloat(document.getElementById('paint-rate').value)   || 0;
+  if (!area)   { alert('Введите площадь'); return; }
+  if (!layers) { alert('Введите количество слоёв'); return; }
+  if (!rate)   { alert('Введите расход краски'); return; }
+
+  const totalL = Math.round(area * layers * rate * 10) / 10;
+
+  lastCalcType   = 'paint';
+  lastCalcInput  = { area_m2: area, layers, rate_per_m2: rate };
+  lastCalcResult = { 'Краски нужно (л)': totalL };
+
+  const resDiv  = document.getElementById('paint-result');
+  const resBody = document.getElementById('paint-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="background:var(--primary);border-radius:10px;padding:16px;text-align:center">
+      <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-bottom:4px">Нужно краски</div>
+      <div style="font-size:32px;font-weight:800;color:#fff">${totalL} л</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${area} м² · ${layers} сл. · ${rate} л/м²</div>`;
+  document.getElementById('paint-save-btn').style.display = 'block';
+}
+
+// ── Грунтовка ────────────────────────────────────────────
+function calcPrimer() {
+  const area = parseFloat(document.getElementById('primer-area').value) || 0;
+  const rate = parseFloat(document.getElementById('primer-rate').value) || 0;
+  if (!area) { alert('Введите площадь'); return; }
+  if (!rate) { alert('Введите расход грунтовки'); return; }
+
+  const totalL = Math.round(area * rate * 10) / 10;
+
+  lastCalcType   = 'primer';
+  lastCalcInput  = { area_m2: area, rate_per_m2: rate };
+  lastCalcResult = { 'Грунтовки нужно (л)': totalL };
+
+  const resDiv  = document.getElementById('primer-result');
+  const resBody = document.getElementById('primer-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="background:var(--success);border-radius:10px;padding:16px;text-align:center">
+      <div style="font-size:13px;color:rgba(255,255,255,0.75);margin-bottom:4px">Нужно грунтовки</div>
+      <div style="font-size:32px;font-weight:800;color:#fff">${totalL} л</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${area} м² · ${rate} л/м²</div>`;
+  document.getElementById('primer-save-btn').style.display = 'block';
+}
+
+// ── Стяжка пола ──────────────────────────────────────────
+function calcScreed() {
+  const area  = parseFloat(document.getElementById('screed-area').value)  || 0;
+  const thick = parseFloat(document.getElementById('screed-thick').value) || 0;
+  if (!area)  { alert('Введите площадь'); return; }
+  if (!thick) { alert('Введите толщину стяжки'); return; }
+
+  // ЦПС плотность ~1800 кг/м³
+  const vol    = Math.round(area * (thick / 1000) * 100) / 100; // м³
+  const massKg = Math.round(vol * 1800);
+  const bags50 = Math.ceil(massKg / 50);
+
+  lastCalcType   = 'screed';
+  lastCalcInput  = { area_m2: area, thickness_mm: thick };
+  lastCalcResult = { 'Объём (м³)': vol, 'Масса смеси (кг)': massKg, 'Мешков × 50 кг': bags50 };
+
+  const resDiv  = document.getElementById('screed-result');
+  const resBody = document.getElementById('screed-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div style="background:var(--warning-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--warning)">${vol}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">м³ раствора</div>
+      </div>
+      <div style="background:var(--warning-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--warning)">${massKg}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">кг смеси</div>
+      </div>
+    </div>
+    <div style="background:var(--warning);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:2px">Мешков по 50 кг</div>
+      <div style="font-size:26px;font-weight:800;color:#fff">${bags50}</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">ЦПС · ${area} м² · ${thick} мм · 1800 кг/м³</div>`;
+  document.getElementById('screed-save-btn').style.display = 'block';
+}
+
+// ── Наливной пол ─────────────────────────────────────────
+function calcSelfLevel() {
+  const area  = parseFloat(document.getElementById('sl-area').value)  || 0;
+  const thick = parseFloat(document.getElementById('sl-thick').value) || 0;
+  if (!area)  { alert('Введите площадь'); return; }
+  if (!thick) { alert('Введите толщину слоя'); return; }
+
+  // Норма ~1.5 кг/м²/мм
+  const massKg = Math.round(area * thick * 1.5);
+  const bags25 = Math.ceil(massKg / 25);
+
+  lastCalcType   = 'self_level';
+  lastCalcInput  = { area_m2: area, thickness_mm: thick };
+  lastCalcResult = { 'Смеси (кг)': massKg, 'Мешков × 25 кг': bags25 };
+
+  const resDiv  = document.getElementById('sl-result');
+  const resBody = document.getElementById('sl-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:var(--primary-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--primary)">${massKg}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">кг смеси</div>
+      </div>
+      <div style="background:var(--primary-bg);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:var(--primary)">${bags25}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">мешков × 25 кг</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">${area} м² · ${thick} мм · 1.5 кг/м²/мм</div>`;
+  document.getElementById('sl-save-btn').style.display = 'block';
+}
+
+// ── Гипсокартон ──────────────────────────────────────────
+function calcDrywall() {
+  const len  = parseFloat(document.getElementById('dw-length').value) || 0;
+  const h    = parseFloat(document.getElementById('dw-height').value) || 0;
+  if (!len) { alert('Введите длину стены'); return; }
+  if (!h)   { alert('Введите высоту'); return; }
+
+  const area  = Math.round(len * h * 100) / 100;
+  // ГКЛ лист 1.2 × 2.5 = 3 м², запас 10%
+  const sheets = Math.ceil(area * 1.1 / 3);
+  // UD профиль (направляющий): пол + потолок = 2 × длина, шт по 3 м
+  const udLm   = Math.round(2 * len * 10) / 10;
+  const udPcs  = Math.ceil(udLm / 3);
+  // CD профиль (стоечный): стойка каждые 60 см + 1
+  const studs  = Math.ceil(len / 0.6) + 1;
+  const cdLm   = Math.round(studs * h * 10) / 10;
+  const cdPcs  = Math.ceil(cdLm / 3);
+
+  lastCalcType   = 'drywall';
+  lastCalcInput  = { length_m: len, height_m: h };
+  lastCalcResult = { 'Площадь (м²)': area, 'Листов ГКЛ': sheets, 'UD пог.м / шт 3м': `${udLm} / ${udPcs}`, 'CD пог.м / шт 3м': `${cdLm} / ${cdPcs}` };
+
+  const resDiv  = document.getElementById('dw-result');
+  const resBody = document.getElementById('dw-result-body');
+  resDiv.style.display = 'block';
+  resBody.innerHTML = `
+    <div style="background:var(--profit-bg);border-radius:10px;padding:12px;text-align:center;margin-bottom:10px;border:1px solid rgba(124,58,237,0.15)">
+      <div style="font-size:13px;color:var(--profit-color);font-weight:600;margin-bottom:2px">Площадь стены</div>
+      <div style="font-size:26px;font-weight:800;color:var(--profit-color)">${area} м²</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div style="background:var(--profit-bg);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(124,58,237,0.15)">
+        <div style="font-size:22px;font-weight:800;color:var(--profit-color)">${sheets}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">листов ГКЛ</div>
+      </div>
+      <div style="background:var(--profit-bg);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(124,58,237,0.15)">
+        <div style="font-size:22px;font-weight:800;color:var(--profit-color)">${udPcs}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">UD профиль (шт 3м)</div>
+      </div>
+    </div>
+    <div style="background:var(--profit-bg);border-radius:10px;padding:12px;text-align:center;border:1px solid rgba(124,58,237,0.15)">
+      <div style="font-size:20px;font-weight:800;color:var(--profit-color)">${cdPcs} шт</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">CD профиль (стоечный, 3м) · ${studs} стоек × ${h}м</div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-top:8px">Шаг стоек 600 мм · ГКЛ 1.2×2.5 м · запас 10%</div>`;
+  document.getElementById('dw-save-btn').style.display = 'block';
+}
+
 function openCalculations() {
   showScreen('screen-calculations');
   loadCalculations();
@@ -1681,6 +2001,228 @@ async function confirmDelete() {
       <div class="stat-label">🧮 Расчётов всего</div>
       <div class="stat-value" id="stat-calc">—</div>
     </div>
+  </div>
+</div>
+<!-- ─── ЭКРАН: КАЛЬКУЛЯТОР МАТЕРИАЛОВ ─────────────────── -->
+<div id="screen-calc-materials" class="screen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="back-btn" onclick="showScreen('screen-dashboard')">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+      </button>
+      <h1>Калькулятор материалов</h1>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- Табы (прокручиваемые) -->
+    <div style="display:flex;gap:6px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch">
+      <button id="mtab-plaster"    class="tab active"   onclick="switchMaterialTab('plaster')"    style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Штукатурка</button>
+      <button id="mtab-putty"      class="tab inactive" onclick="switchMaterialTab('putty')"      style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Шпаклёвка</button>
+      <button id="mtab-paint"      class="tab inactive" onclick="switchMaterialTab('paint')"      style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Краска</button>
+      <button id="mtab-primer"     class="tab inactive" onclick="switchMaterialTab('primer')"     style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Грунтовка</button>
+      <button id="mtab-screed"     class="tab inactive" onclick="switchMaterialTab('screed')"     style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Стяжка</button>
+      <button id="mtab-self_level" class="tab inactive" onclick="switchMaterialTab('self_level')" style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">Наливной</button>
+      <button id="mtab-drywall"    class="tab inactive" onclick="switchMaterialTab('drywall')"    style="flex-shrink:0;padding:8px 12px;border-radius:8px;border:none;font-weight:700;cursor:pointer;white-space:nowrap">ГКЛ</button>
+    </div>
+
+    <!-- ── ШТУКАТУРКА ── -->
+    <div id="matcalc-plaster">
+      <!-- Тип штукатурки -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Тип штукатурки</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="ptype-rotband" class="tab active" onclick="setPlasterType('rotband')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Ротбанд</button>
+          <button id="ptype-cps"    class="tab inactive" onclick="setPlasterType('cps')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">ЦПС</button>
+        </div>
+      </div>
+
+      <!-- Параметры -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь стен (м²)</div>
+            <input id="plaster-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Толщина слоя (мм)</div>
+            <input id="plaster-thick" type="number" placeholder="например 15" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+
+      <!-- Результат -->
+      <div id="plaster-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат расчёта</div>
+        <div id="plaster-result-body" style="margin-top:8px"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcPlaster()">Рассчитать</button>
+      <button id="plaster-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('plaster')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── ШПАКЛЁВКА ── -->
+    <div id="matcalc-putty" style="display:none">
+      <!-- Тип шпаклёвки -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Тип шпаклёвки</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="putype-start"  class="tab active"   onclick="setPuttyType('start')"  style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Стартовая</button>
+          <button id="putype-finish" class="tab inactive" onclick="setPuttyType('finish')" style="flex:1;padding:8px;border-radius:8px;border:none;font-weight:700;cursor:pointer">Финишная</button>
+        </div>
+      </div>
+
+      <!-- Параметры -->
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь (м²)</div>
+            <input id="putty-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Количество слоёв</div>
+            <input id="putty-layers" type="number" placeholder="2" value="2" min="1" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted)">
+          Норма: стартовая 1.2 кг/м²/слой · финишная 1.0 кг/м²/слой
+        </div>
+      </div>
+
+      <!-- Результат -->
+      <div id="putty-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат расчёта</div>
+        <div id="putty-result-body" style="margin-top:8px"></div>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcPutty()">Рассчитать</button>
+      <button id="putty-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('putty')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── КРАСКА ── -->
+    <div id="matcalc-paint" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь (м²)</div>
+            <input id="paint-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Слоёв</div>
+            <input id="paint-layers" type="number" placeholder="2" value="2" min="1" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Расход (л/м²) — из техпаспорта</div>
+          <input id="paint-rate" type="number" placeholder="0.15" value="0.15" step="0.01" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+        </div>
+      </div>
+      <div id="paint-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат</div>
+        <div id="paint-result-body" style="margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcPaint()">Рассчитать</button>
+      <button id="paint-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('paint')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── ГРУНТОВКА ── -->
+    <div id="matcalc-primer" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь (м²)</div>
+            <input id="primer-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Расход (л/м²)</div>
+            <input id="primer-rate" type="number" placeholder="0.2" value="0.2" step="0.01" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+      </div>
+      <div id="primer-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат</div>
+        <div id="primer-result-body" style="margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcPrimer()">Рассчитать</button>
+      <button id="primer-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('primer')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── СТЯЖКА ПОЛА ── -->
+    <div id="matcalc-screed" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь (м²)</div>
+            <input id="screed-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Толщина (мм)</div>
+            <input id="screed-thick" type="number" placeholder="50" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted)">ЦПС · плотность 1800 кг/м³</div>
+      </div>
+      <div id="screed-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат</div>
+        <div id="screed-result-body" style="margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcScreed()">Рассчитать</button>
+      <button id="screed-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('screed')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── НАЛИВНОЙ ПОЛ ── -->
+    <div id="matcalc-self_level" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Параметры</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Площадь (м²)</div>
+            <input id="sl-area" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Толщина (мм)</div>
+            <input id="sl-thick" type="number" placeholder="5" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted)">Норма расхода: 1.5 кг/м²/мм · мешки по 25 кг</div>
+      </div>
+      <div id="sl-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат</div>
+        <div id="sl-result-body" style="margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcSelfLevel()">Рассчитать</button>
+      <button id="sl-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('self_level')">💾 Сохранить расчёт</button>
+    </div>
+
+    <!-- ── ГИПСОКАРТОН ── -->
+    <div id="matcalc-drywall" style="display:none">
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-title">Размеры стены</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Длина (м)</div>
+            <input id="dw-length" type="number" placeholder="0.0" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:4px">Высота (м)</div>
+            <input id="dw-height" type="number" placeholder="2.7" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:16px;box-sizing:border-box">
+          </div>
+        </div>
+        <div style="margin-top:8px;padding:8px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted)">ГКЛ 1.2×2.5 м · шаг стоек 600 мм · запас 10%</div>
+      </div>
+      <div id="dw-result" style="display:none" class="card" style="margin-bottom:12px">
+        <div class="card-title">Результат</div>
+        <div id="dw-result-body" style="margin-top:8px"></div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="calcDrywall()">Рассчитать</button>
+      <button id="dw-save-btn" class="btn btn-outline" style="width:100%;display:none" onclick="saveCalc('drywall')">💾 Сохранить расчёт</button>
+    </div>
+
   </div>
 </div>
 
